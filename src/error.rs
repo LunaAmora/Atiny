@@ -40,7 +40,7 @@ impl<'a> Error<'a> {
 
 impl<'a> Display for Error<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "\n[error] : {message} at {location}\n", message = self.message, location = self.location)?;
+        writeln!(f, "\n[error]: {message} at {location}\n", message = self.message, location = self.location)?;
 
         let lines = self.code.lines().collect::<Vec<_>>()[self.location.0.line..=self.location.1.line].to_vec();
 

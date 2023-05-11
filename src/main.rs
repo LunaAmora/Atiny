@@ -1,7 +1,7 @@
 use std::process::exit;
 
 use atiny::{
-    check::{Ctx, MonoType, TypeScheme},
+    check::{context::Ctx, infer, types::MonoType},
     error::Error,
     parser::SyntaxParser,
 };
@@ -9,37 +9,38 @@ use atiny::{
 fn main() {
     let code = "
         let id = |x| x;
-        id 2
+        to_string (to_string 2)
     ";
 
-    let parsed = SyntaxParser::new().parse(code).unwrap_or_else(|err| {
-        eprintln!("{}", Error::from_lalrpop(err, code));
-        exit(1)
-    });
-
-    let mut names = 0;
-    let mut ctx = Ctx::new(&mut names);
-
-    let p = TypeScheme {
-        names: vec!["a".to_string(), "b".to_string()],
-        mono: MonoType::arrow(
-            MonoType::var("a".to_string()),
+    let ctx = Ctx::new(code);
+    let ctx = ctx.extend(
+        "add".to_string(),
+        MonoType::arrow(
+            MonoType::var("Int".to_string()),
             MonoType::arrow(
-                MonoType::var("b".to_string()),
-                MonoType::var("a".to_string()),
+                MonoType::var("Int".to_string()),
+                MonoType::var("Int".to_string()),
             ),
-        ),
-    };
+        )
+        .to_poly(),
+    );
+    let ctx = ctx.extend(
+        "to_string".to_string(),
+        MonoType::arrow(
+            MonoType::var("Int".to_string()),
+            MonoType::var("String".to_string()),
+        )
+        .to_poly(),
+    );
 
-    let p2 = p.instantiate(&mut ctx);
+    let result_type = SyntaxParser::new()
+        .parse(code)
+        .map_err(|x| Error::from_lalrpop(x, code))
+        .and_then(|parsed| infer(ctx.clone(), parsed))
+        .unwrap_or_else(|err| {
+            eprintln!("{}", err);
+            exit(1)
+        });
 
-    if let MonoType::Arrow(n, _) = &&*p2 {
-        if let MonoType::Hole(h) = &&**n {
-            h.fill(MonoType::var("UwU".to_string()))
-        }
-    }
-
-    println!("{}", p);
-    println!("{}", p2);
-    println!("{}", p2.generalize(&mut ctx));
+    println!("{}", result_type);
 }

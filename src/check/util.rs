@@ -8,5 +8,5 @@ pub fn format_radix(mut x: usize, radix: usize) -> String {
             break;
         }
     }
-    result.into_iter().rev().collect()
+    format!("'{}", result.into_iter().rev().collect::<String>())
 }

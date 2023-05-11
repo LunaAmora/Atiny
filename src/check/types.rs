@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc, fmt, hash::{Hasher, Hash}};
 
-use crate::util;
+use super::context::Ctx;
 
 #[derive(Debug)]
 pub struct TypeScheme {
@@ -9,7 +9,7 @@ pub struct TypeScheme {
 }
 
 impl TypeScheme {
-    pub fn instantiate(&self, ctx: &mut Ctx) -> Rc<MonoType> {
+    pub fn instantiate(&self, ctx: Ctx) -> Rc<MonoType> {
         let substitutions = self
             .names
             .iter()
@@ -142,6 +142,12 @@ impl MonoType {
 }
 
 impl MonoType {
+    pub fn to_poly(&self) -> Rc<TypeScheme> {
+        Rc::new(TypeScheme {
+            names: vec![],
+            mono: Rc::new(self.clone()),
+        })
+    }
     pub fn var(name: String) -> Rc<Self> {
         Rc::new(Self::Var(name))
     }
@@ -154,11 +160,11 @@ impl MonoType {
         Rc::new(Self::Hole(Ref::new(name)))
     }
 
-    pub fn generalize_type(&self, ctx: &mut Ctx, holes: &mut HashMap<Ref, String>) -> Rc<MonoType> {
+    pub fn generalize_type(&self, ctx: Ctx, holes: &mut HashMap<Ref, String>) -> Rc<MonoType> {
         match self {
             Self::Var(_) => Rc::new(self.clone()),
             Self::Arrow(from, to) => Rc::new(Self::Arrow(
-                from.generalize_type(ctx, holes),
+                from.generalize_type(ctx.clone(), holes),
                 to.generalize_type(ctx, holes),
             )),
             Self::Hole(item) => match item.get().clone() {
@@ -171,7 +177,7 @@ impl MonoType {
         }
     }
 
-    pub fn generalize(&self, ctx: &mut Ctx) -> Rc<TypeScheme> {
+    pub fn generalize(&self, ctx: Ctx) -> Rc<TypeScheme> {
         let mut names = Default::default();
 
         let mono = self.generalize_type(ctx, &mut names);
@@ -180,32 +186,5 @@ impl MonoType {
             names: names.into_values().collect(),
             mono,
         })
-    }
-}
-
-#[derive(Debug)]
-pub struct Ctx<'a> {
-    counter: &'a mut usize,
-    map: im::HashMap<String, Rc<TypeScheme>>,
-}
-
-impl<'a> Ctx<'a> {
-    pub fn new(counter: &'a mut usize) -> Self {
-        Self {
-            counter,
-            map: Default::default(),
-        }
-    }
-
-    pub fn extend(&'a mut self, name: String, typ: Rc<TypeScheme>) -> Self {
-        Self {
-            counter: self.counter,
-            map: self.map.update(name, typ),
-        }
-    }
-
-    pub fn new_name(&mut self) -> String {
-        *self.counter += 1;
-        util::format_radix(*self.counter, 26)
     }
 }
