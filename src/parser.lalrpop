@@ -1,0 +1,34 @@
+use std::str::FromStr;
+use crate::syntax::*;
+
+grammar;
+
+Loc<T>: Syntax = {
+    <s: @L> <data: T> <e: @R> => Syntax { data, location: ByteRange(Byte(s), Byte(e)) }
+}
+
+AtomItem: Item = {
+    <n:Num>            => Item::Number(n),
+    <id: Id>           => Item::Identifier(id),
+    "(" <t:Syntax> ")" => t.data,
+}
+
+Atom: Syntax = Loc<AtomItem>;
+
+CallItem: Item = {
+    <t:Call> <a:Atom> => Item::Application(Box::new(t), Box::new(a)),
+    <t:Atom>          => t.data,
+}
+
+Call: Syntax = Loc<CallItem>;
+
+SyntaxItem: Item = {
+    "|" <t: Id> "|" <s:Syntax>                     => Item::Abstraction(t, Box::new(s)),
+    "let" <t: Id> "=" <e:Syntax> ";" <next:Syntax> => Item::Let(t, Box::new(e), Box::new(next)),
+    <f:Call>                                       => f.data,
+};
+
+pub Syntax : Syntax = Loc<SyntaxItem>;
+
+Num: u64 = <s:r"[0-9]+">                   => u64::from_str(s).unwrap();
+Id: String = <s:r"[a-zA-Z_][a-zA-Z0-9_]*"> => s.to_string();

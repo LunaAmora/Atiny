@@ -1,0 +1,8 @@
+#[macro_use] extern crate lalrpop_util;
+
+pub mod syntax;
+pub mod error;
+pub mod check;
+pub mod util;
+
+lalrpop_mod!(pub parser);
