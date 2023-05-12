@@ -3,6 +3,7 @@ use std::{
     collections::HashMap,
     fmt,
     hash::{Hash, Hasher},
+    ptr::addr_of,
     rc::Rc,
 };
 
@@ -82,7 +83,7 @@ impl Hash for Ref {
 
 impl Ref {
     pub fn identifier(&self) -> u64 {
-        &*self.0.as_ref().borrow() as *const _ as u64
+        addr_of!(*self.0.as_ref().borrow()) as u64
     }
 
     pub fn new(name: String) -> Self {
@@ -121,7 +122,7 @@ impl fmt::Display for MonoType {
         match self {
             Self::Var(name) => write!(f, "{}", name),
             Self::Arrow(from, to) => write!(f, "({} -> {})", from, to),
-            Self::Hole(item) => match item.get().clone() {
+            Self::Hole(item) => match item.get() {
                 Hole::Filled(typ) => write!(f, "{}", typ),
                 Hole::Empty => write!(f, "^{}", item.0.borrow().name),
             },
@@ -130,7 +131,7 @@ impl fmt::Display for MonoType {
 }
 
 impl MonoType {
-    pub fn substitute(&self, substs: &HashMap<String, Rc<MonoType>>) -> Rc<Self> {
+    pub fn substitute(&self, substs: &HashMap<String, Rc<Self>>) -> Rc<Self> {
         match self {
             Self::Var(name) => substs
                 .get(name)
@@ -141,7 +142,7 @@ impl MonoType {
                 Rc::new(Self::Arrow(from.substitute(substs), to.substitute(substs)))
             }
 
-            Self::Hole(item) => match item.get().clone() {
+            Self::Hole(item) => match item.get() {
                 Hole::Filled(typ) => typ.substitute(substs),
                 Hole::Empty => Rc::new(Self::Hole(item.clone())),
             },
@@ -168,7 +169,7 @@ impl MonoType {
         Rc::new(Self::Hole(Ref::new(name)))
     }
 
-    pub fn generalize_type(&self, ctx: Ctx, holes: &mut HashMap<Ref, String>) -> Rc<MonoType> {
+    pub fn generalize_type(&self, ctx: Ctx, holes: &mut HashMap<Ref, String>) -> Rc<Self> {
         match self {
             Self::Var(_) => Rc::new(self.clone()),
 
@@ -177,12 +178,12 @@ impl MonoType {
                 to.generalize_type(ctx, holes),
             )),
 
-            Self::Hole(item) => match item.get().clone() {
+            Self::Hole(item) => match item.get() {
                 Hole::Filled(typ) => typ.generalize_type(ctx, holes),
 
                 Hole::Empty => {
                     let name = holes.entry(item.clone()).or_insert_with(|| ctx.new_name());
-                    MonoType::var(name.clone())
+                    Self::var(name.clone())
                 }
             },
         }

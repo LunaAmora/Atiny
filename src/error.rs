@@ -54,7 +54,7 @@ impl<'a> Display for Error<'a> {
             .to_vec();
 
         for (i, line) in lines.iter().enumerate() {
-            write!(f, "{:>3} | {}\n", self.location.0.line + i, line)?;
+            writeln!(f, "{:>3} | {}", self.location.0.line + i, line)?;
         }
 
         Ok(())

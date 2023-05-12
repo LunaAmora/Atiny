@@ -38,13 +38,13 @@ pub struct Point {
 pub struct Range(pub Point, pub Point);
 
 impl Range {
-    pub fn new(start: usize, end: usize, code: &str) -> Range {
-        Range(Byte(start).locate(code), Byte(end).locate(code))
+    pub fn new(start: usize, end: usize, code: &str) -> Self {
+        Self(Byte(start).locate(code), Byte(end).locate(code))
     }
 
-    pub fn singleton(byte: usize, code: &str) -> Range {
+    pub fn singleton(byte: usize, code: &str) -> Self {
         let point = Byte(byte).locate(code);
-        Range(point, point)
+        Self(point, point)
     }
 }
 
@@ -82,11 +82,11 @@ pub struct Syntax {
 impl fmt::Display for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Item::Number(n) => write!(f, "{n}"),
-            Item::Identifier(id) => write!(f, "{id}"),
-            Item::Abstraction(p, e) => write!(f, "(|{p}| {e})"),
-            Item::Application(fu, a) => write!(f, "({fu} {a})"),
-            Item::Let(n, v, next) => write!(f, "(let {n} = {v}; {next})"),
+            Self::Number(n) => write!(f, "{n}"),
+            Self::Identifier(id) => write!(f, "{id}"),
+            Self::Abstraction(p, e) => write!(f, "(|{p}| {e})"),
+            Self::Application(fu, a) => write!(f, "({fu} {a})"),
+            Self::Let(n, v, next) => write!(f, "(let {n} = {v}; {next})"),
         }
     }
 }

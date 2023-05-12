@@ -36,7 +36,7 @@ fn main() {
     let result_type = SyntaxParser::new()
         .parse(code)
         .map_err(|x| Error::from_lalrpop(x, code))
-        .and_then(|parsed| infer(ctx.clone(), parsed))
+        .and_then(|parsed| infer(&ctx, parsed))
         .unwrap_or_else(|err| {
             eprintln!("{}", err);
             exit(1)

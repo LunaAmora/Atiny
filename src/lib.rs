@@ -5,4 +5,4 @@ pub mod check;
 pub mod error;
 pub mod syntax;
 
-lalrpop_mod!(pub parser);
+lalrpop_mod!(#[allow(warnings)] pub parser);

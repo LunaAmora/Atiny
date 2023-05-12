@@ -8,8 +8,8 @@ pub mod util;
 
 use crate::{error::Error, syntax::Syntax};
 
-pub fn unify<'a>(ctx: Ctx<'a>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error<'a>> {
-    match (&&*left, &&*right) {
+pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error<'_>> {
+    match (&*left, &*right) {
         (MonoType::Var(x), MonoType::Var(y)) if x == y => Ok(()),
 
         (MonoType::Arrow(l, r), MonoType::Arrow(l1, r1)) => {
@@ -17,65 +17,66 @@ pub fn unify<'a>(ctx: Ctx<'a>, left: Rc<MonoType>, right: Rc<MonoType>) -> Resul
             unify(ctx, r.clone(), r1.clone())
         }
 
-        (MonoType::Hole(ref_), _) => match ref_.get().clone() {
+        (MonoType::Hole(ref_), _) => match ref_.get() {
             types::Hole::Empty => {
-                ref_.fill(right.clone());
+                ref_.fill(right);
                 Ok(())
             }
-            types::Hole::Filled(typ1) => unify(ctx, typ1, right.clone()),
+
+            types::Hole::Filled(typ1) => unify(ctx, typ1, right),
         },
 
-        (_, MonoType::Hole(ref_)) => match ref_.get().clone() {
+        (_, MonoType::Hole(ref_)) => match ref_.get() {
             types::Hole::Empty => {
-                ref_.fill(left.clone());
+                ref_.fill(left);
                 Ok(())
             }
-            types::Hole::Filled(typ1) => unify(ctx, left.clone(), typ1),
+
+            types::Hole::Filled(typ1) => unify(ctx, left, typ1),
         },
 
         (l, r) => ctx.error(format!("type mismatch between '{}' and '{}'", l, r)),
     }
 }
 
-pub fn infer<'a>(ctx: Ctx<'a>, expr: Syntax) -> Result<Rc<MonoType>, Error<'a>> {
-    use crate::syntax::Item;
+pub fn infer<'a>(ctx: &Ctx<'a>, expr: Syntax) -> Result<Rc<MonoType>, Error<'a>> {
+    use crate::syntax::Item::*;
 
     let ctx = ctx.set_position(expr.location);
 
     match expr.data {
-        Item::Number(_) => Ok(MonoType::var("Int".to_string())),
+        Number(_) => Ok(MonoType::var("Int".to_string())),
 
-        Item::Identifier(x) => match ctx.lookup(&x) {
+        Identifier(x) => match ctx.lookup(&x) {
             Some(sigma) => Ok(sigma.instantiate(ctx)),
             None => ctx.error(format!("unbound variable '{}'", x)),
         },
 
-        Item::Application(e0, e1) => {
-            let t0 = infer(ctx.clone(), *e0)?;
-            let t1 = infer(ctx.clone(), *e1)?;
+        Application(e0, e1) => {
+            let t0 = infer(&ctx, *e0)?;
+            let t1 = infer(&ctx, *e1)?;
 
             let t_return = ctx.new_hole();
+            let function_type = MonoType::arrow(t1, t_return.clone());
 
-            let function_type = MonoType::arrow(t1.clone(), t_return.clone());
-
-            unify(ctx, t0.clone(), function_type.clone())?;
+            unify(ctx, t0, function_type)?;
 
             Ok(t_return)
         }
 
-        Item::Abstraction(x, e) => {
+        Abstraction(x, e) => {
             let t = ctx.new_hole();
             let new_ctx = ctx.extend(x, t.to_poly());
-            let t_line = infer(new_ctx, *e)?;
-            Ok(MonoType::arrow(t.clone(), t_line.clone()))
+            let t_line = infer(&new_ctx, *e)?;
+            Ok(MonoType::arrow(t, t_line))
         }
 
-        Item::Let(x, e0, e1) => {
-            let t = infer(ctx.clone(), *e0)?;
+        Let(x, e0, e1) => {
+            let t = infer(&ctx, *e0)?;
             let t_generalized = t.generalize(ctx.clone());
-            let new_ctx = ctx.extend(x.clone(), t_generalized.clone());
+            let new_ctx = ctx.extend(x, t_generalized);
 
-            infer(new_ctx, *e1)
+            infer(&new_ctx, *e1)
         }
     }
 }
