@@ -13,7 +13,7 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct Ctx<'a> {
     counter: Rc<RefCell<usize>>,
-    pub map: im::HashMap<String, Rc<TypeScheme>>,
+    pub map: im_rc::HashMap<String, Rc<TypeScheme>>,
     pub code: &'a str,
     pub location: ByteRange,
 }

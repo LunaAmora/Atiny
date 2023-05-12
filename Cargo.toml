@@ -8,7 +8,7 @@ build = "build.rs"
 
 [dependencies]
 lalrpop-util = {version = "0.19.12", features = ["lexer"]}
-im = "*"
+im-rc = "*"
 
 [build-dependencies]
 lalrpop = {version = "0.19.12", features = ["lexer"]}
