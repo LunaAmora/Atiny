@@ -10,8 +10,8 @@ impl Byte {
             if acc + code_line.len() + 1 > self.0 {
                 return Point {
                     line,
-                    column: self.0 - acc
-                }
+                    column: self.0 - acc,
+                };
             }
             acc += code_line.len() + 1;
         }
@@ -31,7 +31,7 @@ impl ByteRange {
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub struct Point {
     pub line: usize,
-    pub column: usize
+    pub column: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -46,7 +46,6 @@ impl Range {
         let point = Byte(byte).locate(code);
         Range(point, point)
     }
-
 }
 
 impl Display for Point {
@@ -77,7 +76,7 @@ pub enum Item {
 #[derive(Debug)]
 pub struct Syntax {
     pub location: ByteRange,
-    pub data: Item
+    pub data: Item,
 }
 
 impl fmt::Display for Item {

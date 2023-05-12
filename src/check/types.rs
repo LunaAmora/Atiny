@@ -1,4 +1,10 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, fmt, hash::{Hasher, Hash}};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    fmt,
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
 
 use super::context::Ctx;
 
@@ -130,9 +136,11 @@ impl MonoType {
                 .get(name)
                 .cloned()
                 .unwrap_or_else(|| Rc::new(Self::Var(name.clone()))),
+
             Self::Arrow(from, to) => {
                 Rc::new(Self::Arrow(from.substitute(substs), to.substitute(substs)))
             }
+
             Self::Hole(item) => match item.get().clone() {
                 Hole::Filled(typ) => typ.substitute(substs),
                 Hole::Empty => Rc::new(Self::Hole(item.clone())),
@@ -163,12 +171,15 @@ impl MonoType {
     pub fn generalize_type(&self, ctx: Ctx, holes: &mut HashMap<Ref, String>) -> Rc<MonoType> {
         match self {
             Self::Var(_) => Rc::new(self.clone()),
+
             Self::Arrow(from, to) => Rc::new(Self::Arrow(
                 from.generalize_type(ctx.clone(), holes),
                 to.generalize_type(ctx, holes),
             )),
+
             Self::Hole(item) => match item.get().clone() {
                 Hole::Filled(typ) => typ.generalize_type(ctx, holes),
+
                 Hole::Empty => {
                     let name = holes.entry(item.clone()).or_insert_with(|| ctx.new_name());
                     MonoType::var(name.clone())

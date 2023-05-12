@@ -1,14 +1,14 @@
 use core::fmt;
 use std::fmt::Display;
 
-use lalrpop_util::{ParseError, lexer::Token};
+use lalrpop_util::{lexer::Token, ParseError};
 
 use crate::syntax::Range;
 
 pub struct Error<'a> {
     message: String,
     location: Range,
-    code: &'a str
+    code: &'a str,
 }
 
 impl<'a> Error<'a> {
@@ -16,7 +16,7 @@ impl<'a> Error<'a> {
         Self {
             message: message.into(),
             location,
-            code
+            code,
         }
     }
 
@@ -32,7 +32,9 @@ impl<'a> Error<'a> {
             UnrecognizedToken { token, .. } => {
                 Error::new("unrecognized token", Range::singleton(token.0, code), code)
             }
-            ExtraToken { token } => Error::new("extra token", Range::singleton(token.0, code), code),
+            ExtraToken { token } => {
+                Error::new("extra token", Range::singleton(token.0, code), code)
+            }
             User { .. } => panic!("oh no :>"),
         }
     }
@@ -40,9 +42,16 @@ impl<'a> Error<'a> {
 
 impl<'a> Display for Error<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "\n[error]: {message} at {location}\n", message = self.message, location = self.location)?;
+        writeln!(
+            f,
+            "\n[error]: {message} at {location}\n",
+            message = self.message,
+            location = self.location
+        )?;
 
-        let lines = self.code.lines().collect::<Vec<_>>()[self.location.0.line..=self.location.1.line].to_vec();
+        let lines = self.code.lines().collect::<Vec<_>>()
+            [self.location.0.line..=self.location.1.line]
+            .to_vec();
 
         for (i, line) in lines.iter().enumerate() {
             write!(f, "{:>3} | {}\n", self.location.0.line + i, line)?;

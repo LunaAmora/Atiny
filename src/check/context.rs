@@ -1,15 +1,21 @@
-use std::{rc::Rc, cell::RefCell};
+use std::{cell::RefCell, rc::Rc};
 
-use crate::{error::Error, syntax::{ByteRange, Byte}};
+use crate::{
+    error::Error,
+    syntax::{Byte, ByteRange},
+};
 
-use super::{types::{TypeScheme, MonoType}, util};
+use super::{
+    types::{MonoType, TypeScheme},
+    util,
+};
 
 #[derive(Debug, Clone)]
 pub struct Ctx<'a> {
     counter: Rc<RefCell<usize>>,
     pub map: im::HashMap<String, Rc<TypeScheme>>,
     pub code: &'a str,
-    pub location: ByteRange
+    pub location: ByteRange,
 }
 
 impl<'a> Ctx<'a> {
@@ -18,7 +24,7 @@ impl<'a> Ctx<'a> {
             counter: Rc::new(RefCell::new(0)),
             map: Default::default(),
             code,
-            location: ByteRange(Byte(0), Byte(0))
+            location: ByteRange(Byte(0), Byte(0)),
         }
     }
 
@@ -27,7 +33,7 @@ impl<'a> Ctx<'a> {
             counter: self.counter.clone(),
             map: self.map.update(name, typ),
             code: self.code,
-            location: self.location
+            location: self.location,
         }
     }
 
