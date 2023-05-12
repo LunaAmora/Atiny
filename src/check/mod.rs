@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use self::{context::Ctx, types::MonoType};
+use self::{
+    context::Ctx,
+    types::{Hole, MonoType, Ref},
+};
 
 pub mod context;
 pub mod types;
@@ -17,26 +20,26 @@ pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<()
             unify(ctx, r.clone(), r1.clone())
         }
 
-        (MonoType::Hole(ref_), _) => match ref_.get() {
-            types::Hole::Empty => {
-                ref_.fill(right);
-                Ok(())
-            }
+        (MonoType::Hole(ref_), _) => unify_hole(ctx, ref_, right, false),
 
-            types::Hole::Filled(typ1) => unify(ctx, typ1, right),
-        },
-
-        (_, MonoType::Hole(ref_)) => match ref_.get() {
-            types::Hole::Empty => {
-                ref_.fill(left);
-                Ok(())
-            }
-
-            types::Hole::Filled(typ1) => unify(ctx, left, typ1),
-        },
+        (_, MonoType::Hole(ref_)) => unify_hole(ctx, ref_, left, true),
 
         (l, r) => ctx.error(format!("type mismatch between '{}' and '{}'", l, r)),
     }
+}
+
+fn unify_hole<'a>(
+    ctx: Ctx<'a>,
+    hole: &Ref,
+    other: Rc<MonoType>,
+    swap: bool,
+) -> Result<(), Error<'a>> {
+    match hole.get() {
+        Hole::Empty => hole.fill(other),
+        Hole::Filled(filled) if swap => return unify(ctx, other, filled),
+        Hole::Filled(filled) => return unify(ctx, filled, other),
+    }
+    Ok(())
 }
 
 pub fn infer<'a>(ctx: &Ctx<'a>, expr: Syntax) -> Result<Rc<MonoType>, Error<'a>> {
