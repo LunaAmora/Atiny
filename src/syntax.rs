@@ -67,6 +67,7 @@ impl Display for Range {
 #[derive(Debug)]
 pub enum Item {
     Number(u64),
+    Boolean(bool),
     Identifier(String),
     Abstraction(String, Box<Syntax>),
     Application(Box<Syntax>, Box<Syntax>),
@@ -83,6 +84,7 @@ impl fmt::Display for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Number(n) => write!(f, "{n}"),
+            Self::Boolean(b) => write!(f, "{b}"),
             Self::Identifier(id) => write!(f, "{id}"),
             Self::Abstraction(p, e) => write!(f, "(|{p}| {e})"),
             Self::Application(fu, a) => write!(f, "({fu} {a})"),

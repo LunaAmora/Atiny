@@ -50,6 +50,8 @@ pub fn infer<'a>(ctx: &Ctx<'a>, expr: Syntax) -> Result<Rc<MonoType>, Error<'a>>
     match expr.data {
         Number(_) => Ok(MonoType::var("Int".to_string())),
 
+        Boolean(_) => Ok(MonoType::var("Bool".to_string())),
+
         Identifier(x) => match ctx.lookup(&x) {
             Some(sigma) => Ok(sigma.instantiate(ctx)),
             None => ctx.error(format!("unbound variable '{}'", x)),

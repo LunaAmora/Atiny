@@ -9,6 +9,8 @@ Loc<T>: Syntax = {
 
 AtomItem: Item = {
     <n:Num>            => Item::Number(n),
+    "true"             => Item::Boolean(true),
+    "false"            => Item::Boolean(false),
     <id: Id>           => Item::Identifier(id),
     "(" <t:Syntax> ")" => t.data,
 }
