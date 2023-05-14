@@ -83,5 +83,7 @@ pub fn infer<'a>(ctx: &Ctx<'a>, expr: Syntax) -> Result<Rc<MonoType>, Error<'a>>
 
             infer(&new_ctx, *e1)
         }
+
+        Match(_, _) => todo!(),
     }
 }

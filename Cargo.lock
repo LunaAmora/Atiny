@@ -25,6 +25,7 @@ name = "atiny"
 version = "0.1.0"
 dependencies = [
  "im-rc",
+ "itertools",
  "lalrpop",
  "lalrpop-util",
 ]

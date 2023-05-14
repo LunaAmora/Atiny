@@ -8,8 +8,11 @@ use atiny::{
 
 fn main() {
     let code = "
-        let id = |x| x;
-        to_string (to_string 2)
+        let a = 20;
+        match a {
+            10 => false,
+            20 => true,
+        }
     ";
 
     let ctx = Ctx::new(code);

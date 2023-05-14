@@ -1,5 +1,7 @@
 use std::fmt::{self, Display};
 
+use itertools::Itertools;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Byte(pub usize);
 
@@ -69,6 +71,7 @@ pub enum Item {
     Number(u64),
     Boolean(bool),
     Identifier(String),
+    Match(Box<Syntax>, Vec<Clause>),
     Abstraction(String, Box<Syntax>),
     Application(Box<Syntax>, Box<Syntax>),
     Let(String, Box<Syntax>, Box<Syntax>),
@@ -80,7 +83,7 @@ pub struct Syntax {
     pub data: Item,
 }
 
-impl fmt::Display for Item {
+impl Display for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Number(n) => write!(f, "{n}"),
@@ -89,12 +92,44 @@ impl fmt::Display for Item {
             Self::Abstraction(p, e) => write!(f, "(|{p}| {e})"),
             Self::Application(fu, a) => write!(f, "({fu} {a})"),
             Self::Let(n, v, next) => write!(f, "(let {n} = {v}; {next})"),
+            Self::Match(e, c) => write!(f, "{e} {{{}}}", c.iter().join(", ")),
         }
     }
 }
 
-impl fmt::Display for Syntax {
+impl Display for Syntax {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.data)
+    }
+}
+
+#[derive(Debug)]
+pub enum Pattern {
+    Item(Item),
+}
+
+impl Display for Pattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Pattern::Item(i) => write!(f, "{i}"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Clause {
+    pub pat: Pattern,
+    pub expr: Syntax,
+}
+
+impl Clause {
+    pub fn new(pat: Pattern, expr: Syntax) -> Self {
+        Self { pat, expr }
+    }
+}
+
+impl Display for Clause {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} => {}", self.pat, self.expr)
     }
 }
