@@ -1,57 +1,13 @@
 use std::str::FromStr;
-use crate::syntax::*;
+
+use crate::syntax::tree::*;
+use crate::location::*;
 
 grammar;
 
-Loc<T>: Syntax = {
-    <s: @L> <data: T> <e: @R> => Syntax { data, location: ByteRange(Byte(s), Byte(e)) }
+Loc<T>: Located<T> = {
+    <s: @L> <data: T> <e: @R> => Located { data, location: ByteRange(Byte(s), Byte(e)) }
 }
-
-AtomItem: Item = {
-    <n:Num>            => Item::Number(n),
-    "true"             => Item::Boolean(true),
-    "false"            => Item::Boolean(false),
-    <id: Id>           => Item::Identifier(id),
-    "(" <mut t:Comma<Syntax>> ")" => {
-        let (mut vec, trailing) = t;
-        match vec.len() {
-            0 => Item::Unit,
-            1 if !trailing => vec.pop().unwrap().data,
-            _ => Item::Tuple(vec),
-        }
-    },
-}
-
-Atom: Syntax = Loc<AtomItem>;
-
-CallItem: Item = {
-    <t:Call> <a:Atom> => Item::Application(Box::new(t), Box::new(a)),
-    <t:Atom>          => t.data,
-}
-
-Call: Syntax = Loc<CallItem>;
-
-Clause: Clause = {
-    <pat:Atom> "=>" <e:Syntax> => Clause::new(Pattern(pat), e)
-}
-
-Clauses = Comma<Clause>;
-
-SyntaxItem: Item = {
-    "|" <t: Id> "|" <s:Syntax>                     => Item::Abstraction(t, Box::new(s)),
-    "let" <t: Id> "=" <e:Syntax> ";" <next:Syntax> => Item::Let(t, Box::new(e), Box::new(next)),
-    "match" <pat:Syntax> "{" <c:Clauses> "}"       => Item::Match(Box::new(pat), c.0),
-    "if" "let" <pat:Atom> "=" <m:Syntax> 
-        "{" <t:Syntax> "}" "else" 
-        "{" <f:Syntax> "}"                         => Item::if_let(pat, m, t, f),
-    "{" <t:Syntax> "}"                             => t.data,
-    <f:Call>                                       => f.data,
-};
-
-pub Syntax : Syntax = Loc<SyntaxItem>;
-
-Num: u64 = <s:r"[0-9]+">                   => u64::from_str(s).unwrap();
-Id: String = <s:r"[a-zA-Z_][a-zA-Z0-9_]*"> => s.to_string();
 
 Comma<T>: (Vec<T>, bool) = {
     <mut v:(<T> ",")*> =>  (v, true),
@@ -61,3 +17,89 @@ Comma<T>: (Vec<T>, bool) = {
         (v, false)
     }
 };
+
+// For expressions
+
+AtomItem: ExprKind = {
+    <n:Num>            => ExprKind::Number(n),
+    "true"             => ExprKind::Boolean(true),
+    "false"            => ExprKind::Boolean(false),
+    <id: Id>           => ExprKind::Identifier(id),
+    "(" <mut t:Comma<Expr>> ")" => {
+        let (mut vec, trailing) = t;
+        match vec.len() {
+            0 => ExprKind::Unit,
+            1 if !trailing => vec.pop().unwrap().data,
+            _ => ExprKind::Tuple(vec),
+        }
+    },
+}
+
+Atom: Expr = Loc<AtomItem>;
+
+CallItem: ExprKind = {
+    <t:Call> <a:Atom> => ExprKind::Application(Box::new(t), Box::new(a)),
+    <t:Atom>          => t.data,
+}
+
+Call: Expr = Loc<CallItem>;
+
+Clause: Clause = {
+    <pat:Atom> "=>" <e:Expr> => Clause::new(Pattern(pat), e)
+}
+
+Clauses = Comma<Clause>;
+
+ExprItem: ExprKind = {
+    "|" <t: Id> "|" <s:Expr>                     => ExprKind::Abstraction(t, Box::new(s)),
+    "let" <t: Id> "=" <e:Expr> ";" <next:Expr> => ExprKind::Let(t, Box::new(e), Box::new(next)),
+    "match" <pat:Expr> "{" <c:Clauses> "}"       => ExprKind::Match(Box::new(pat), c.0),
+    "if" "let" <pat:Atom> "=" <m:Expr>
+        "{" <t:Expr> "}" "else"
+        "{" <f:Expr> "}"                         => ExprKind::if_let(pat, m, t, f),
+    "{" <t:Expr> "}"                             => t.data,
+    <f:Call> ":" <t: Type>                       => ExprKind::Annotation(Box::new(f), Box::new(t)),
+    <f:Call>                                     => f.data,
+};
+
+pub Expr : Expr = Loc<ExprItem>;
+
+// For Types
+
+TypeAtomItem : TypeKind = {
+    <id: Id>                    => TypeKind::Variable(VariableNode { name: id }),
+    "(" <mut t:Comma<Type>> ")" => {
+        let (mut vec, trailing) = t;
+        match vec.len() {
+            0 => TypeKind::Unit,
+            1 if !trailing => vec.pop().unwrap().data,
+            _ => TypeKind::Tuple(TypeTupleNode { types: vec }),
+        }
+    },
+}
+
+TypeAtom : Type = Loc<TypeAtomItem>;
+
+TypeCallItem : TypeKind = {
+    <t:TypeCall> <a:TypeAtom> => todo!(),
+    <t:TypeAtom>  => t.data,
+}
+
+TypeCall : Type = Loc<TypeCallItem>;
+
+TypeArrowItem : TypeKind = {
+    <t:TypeCall> "->" <a:Type> => TypeKind::Arrow(ArrowNode {left: Box::new(t), right: Box::new(a)}),
+    <t:TypeCall>               => t.data,
+}
+
+TypeArrow : Type = Loc<TypeArrowItem>;
+
+TypeKind : TypeKind = {
+    <t: TypeArrow> => t.data,
+    "forall" <args: Id*> "." <body: Type> => TypeKind::Forall(ForallNode { args, body: Box::new(body) }),
+}
+
+Type : Type = Loc<TypeKind>;
+
+Num: u64 = <s:r"[0-9]+">                   => u64::from_str(s).unwrap();
+Id: String = <s:r"[a-zA-Z_][a-zA-Z0-9_]*"> => s.to_string();

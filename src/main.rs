@@ -3,16 +3,13 @@ use std::process::exit;
 use atiny::{
     check::{context::Ctx, types::MonoType, Infer},
     error::Error,
-    parser::SyntaxParser,
+    parser::ExprParser,
 };
 
 fn main() {
     let code = "
-        let b = |a| match a {
-            (69, 420) => 420,
-            (n, m) => n,
-        };
-        b
+        let b = |x| x;
+        (b : forall x. x -> x)
     ";
 
     let ctx = Ctx::new(code);
@@ -36,7 +33,7 @@ fn main() {
         .to_poly(),
     );
 
-    let result_type = SyntaxParser::new()
+    let result_type = ExprParser::new()
         .parse(code)
         .map_err(|x| Error::from_lalrpop(x, code))
         .and_then(|parsed| parsed.infer(&ctx))

@@ -1,9 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{
-    error::Error,
-    syntax::{Byte, ByteRange},
-};
+use crate::{error::Error, location::ByteRange};
 
 use super::{
     types::{MonoType, TypeScheme},
@@ -14,6 +11,7 @@ use super::{
 pub struct Ctx<'a> {
     counter: Rc<RefCell<usize>>,
     pub map: im_rc::HashMap<String, Rc<TypeScheme>>,
+    pub typ_map: im_rc::HashSet<String>,
     pub code: &'a str,
     pub location: ByteRange,
 }
@@ -23,8 +21,9 @@ impl<'a> Ctx<'a> {
         Self {
             counter: Rc::new(RefCell::new(0)),
             map: Default::default(),
+            typ_map: Default::default(),
             code,
-            location: ByteRange(Byte(0), Byte(0)),
+            location: Default::default(),
         }
     }
 
@@ -34,6 +33,27 @@ impl<'a> Ctx<'a> {
             map: self.map.update(name, typ),
             code: self.code,
             location: self.location,
+            typ_map: self.typ_map.clone(),
+        }
+    }
+
+    pub fn extend_type(&self, name: String) -> Self {
+        Self {
+            counter: self.counter.clone(),
+            map: self.map.clone(),
+            code: self.code,
+            location: self.location,
+            typ_map: self.typ_map.update(name),
+        }
+    }
+
+    pub fn extend_types(&self, names: &[String]) -> Self {
+        Self {
+            counter: self.counter.clone(),
+            map: self.map.clone(),
+            code: self.code,
+            location: self.location,
+            typ_map: self.typ_map.clone().union(names.iter().cloned().collect()),
         }
     }
 

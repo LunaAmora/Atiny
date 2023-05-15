@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use lalrpop_util::{lexer::Token, ParseError};
 
-use crate::syntax::Range;
+use crate::location::Range;
 
 pub struct Error<'a> {
     message: String,

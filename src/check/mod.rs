@@ -2,7 +2,7 @@ use std::{collections::HashSet, rc::Rc};
 
 use self::{
     context::Ctx,
-    types::{Hole, MonoType, Ref},
+    types::{Hole, MonoType, Ref, TypeScheme},
 };
 
 pub mod context;
@@ -11,7 +11,7 @@ pub mod util;
 
 use crate::{
     error::Error,
-    syntax::{Item::*, Pattern, Syntax},
+    syntax::tree::{Expr, ExprKind::*, Pattern, Type, TypeKind},
 };
 
 pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error<'_>> {
@@ -57,7 +57,7 @@ pub trait Infer {
     fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a>;
 }
 
-impl Infer for Syntax {
+impl Infer for Expr {
     type Return<'a> = Result<Rc<MonoType>, Error<'a>>;
 
     fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a> {
@@ -121,6 +121,14 @@ impl Infer for Syntax {
 
                 Ok(ret_ty)
             }
+            Annotation(expr, typ) => {
+                let typ_res = typ.infer(&ctx)?;
+                let expr_res = expr.infer(&ctx)?;
+
+                unify(ctx, expr_res, typ_res.clone())?;
+
+                Ok(typ_res)
+            },
         }
     }
 }
@@ -166,7 +174,47 @@ impl Infer for Pattern {
     }
 }
 
-fn collect_ids<'a>(s: &'a Syntax, res: &mut HashSet<&'a str>) -> Result<(), &'a Syntax> {
+impl Infer for Type {
+    type Return<'a> = Result<Rc<MonoType>, Error<'a>>;
+
+    fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a> {
+        let ctx = ctx.set_position(self.location);
+
+        match self.data {
+            TypeKind::Arrow(arrow) => {
+                let left = arrow.left.infer(&ctx.clone())?;
+                let right = arrow.right.infer(&ctx.clone())?;
+                Ok(MonoType::arrow(left, right))
+            },
+            TypeKind::Variable(v) => {
+                if ctx.typ_map.contains(&v.name) {
+                    Ok(MonoType::var(v.name.clone()))
+                } else {
+                    ctx.error(format!("unbound type variable '{}'", v.name))
+                }
+            }
+            TypeKind::Tuple(tuple) => {
+                let mut typ = Vec::new();
+                for el in tuple.types {
+                    typ.push(el.infer(&ctx.clone())?);
+                }
+                Ok(MonoType::Tuple(typ).into())
+            },
+            TypeKind::Forall(forall) => {
+                let new_ctx = ctx.extend_types(&forall.args);
+                let mono = forall.body.infer(&new_ctx)?;
+                let forall = TypeScheme { names: forall.args, mono };
+                Ok(forall.instantiate(ctx))
+            },
+            TypeKind::Application(_) => todo!(),
+            TypeKind::Unit => todo!(),
+        }
+    }
+
+    
+}
+
+fn collect_ids<'a>(s: &'a Expr, res: &mut HashSet<&'a str>) -> Result<(), &'a Expr> {
     match &s.data {
         Identifier(x) => {
             if !res.insert(x.as_str()) {
@@ -187,6 +235,7 @@ fn collect_ids<'a>(s: &'a Syntax, res: &mut HashSet<&'a str>) -> Result<(), &'a 
         Abstraction(_, _) => todo!(),
         Application(_, _) => todo!(),
         Let(_, _, _) => todo!(),
+        Annotation(_, _) => todo!(),
     }
     Ok(())
 }
