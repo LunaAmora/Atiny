@@ -77,12 +77,6 @@ pub enum Item {
     Let(String, Box<Syntax>, Box<Syntax>),
 }
 
-#[derive(Debug)]
-pub struct Syntax {
-    pub location: ByteRange,
-    pub data: Item,
-}
-
 impl Display for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -95,6 +89,24 @@ impl Display for Item {
             Self::Match(e, c) => write!(f, "{e} {{{}}}", c.iter().join(", ")),
         }
     }
+}
+
+impl Item {
+    pub fn if_let(pattern: Syntax, matcher: Syntax, true_arm: Syntax, else_arm: Syntax) -> Self {
+        Item::Match(
+            Box::new(matcher),
+            vec![
+                Clause::new(Pattern::Item(pattern.data), true_arm),
+                Clause::new(Pattern::Item(Item::Identifier("_".to_string())), else_arm),
+            ],
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct Syntax {
+    pub location: ByteRange,
+    pub data: Item,
 }
 
 impl Display for Syntax {

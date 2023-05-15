@@ -34,6 +34,10 @@ SyntaxItem: Item = {
     "|" <t: Id> "|" <s:Syntax>                     => Item::Abstraction(t, Box::new(s)),
     "let" <t: Id> "=" <e:Syntax> ";" <next:Syntax> => Item::Let(t, Box::new(e), Box::new(next)),
     "match" <pat:Syntax> "{" <c:Clauses> "}"       => Item::Match(Box::new(pat), c),
+    "if" "let" <pat:Atom> "=" <m:Syntax> 
+        "{" <t:Syntax> "}" "else" 
+        "{" <f:Syntax> "}"                         => Item::if_let(pat, m, t, f),
+    "{" <t:Syntax> "}"                             => t.data,
     <f:Call>                                       => f.data,
 };
 
