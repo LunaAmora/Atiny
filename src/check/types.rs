@@ -7,6 +7,8 @@ use std::{
     rc::Rc,
 };
 
+use itertools::Itertools;
+
 use super::context::Ctx;
 
 #[derive(Debug)]
@@ -113,6 +115,7 @@ impl Ref {
 #[derive(Debug, Clone)]
 pub enum MonoType {
     Var(String),
+    Tuple(Vec<Rc<MonoType>>),
     Arrow(Rc<MonoType>, Rc<MonoType>),
     Hole(Ref),
 }
@@ -121,6 +124,7 @@ impl fmt::Display for MonoType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Var(name) => write!(f, "{}", name),
+            Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Arrow(from, to) => write!(f, "({} -> {})", from, to),
             Self::Hole(item) => match item.get() {
                 Hole::Filled(typ) => write!(f, "{}", typ),
@@ -137,6 +141,10 @@ impl MonoType {
                 .get(name)
                 .cloned()
                 .unwrap_or_else(|| Rc::new(Self::Var(name.clone()))),
+
+            Self::Tuple(vec) => Rc::new(Self::Tuple(
+                vec.iter().map(|mono| mono.substitute(substs)).collect(),
+            )),
 
             Self::Arrow(from, to) => {
                 Rc::new(Self::Arrow(from.substitute(substs), to.substitute(substs)))
@@ -172,6 +180,12 @@ impl MonoType {
     pub fn generalize_type(&self, ctx: Ctx, holes: &mut HashMap<Ref, String>) -> Rc<Self> {
         match self {
             Self::Var(_) => Rc::new(self.clone()),
+
+            Self::Tuple(vec) => Rc::new(Self::Tuple(
+                vec.iter()
+                    .map(|mono| mono.generalize_type(ctx.clone(), holes))
+                    .collect(),
+            )),
 
             Self::Arrow(from, to) => Rc::new(Self::Arrow(
                 from.generalize_type(ctx.clone(), holes),

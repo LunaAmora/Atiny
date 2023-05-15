@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{collections::HashSet, rc::Rc};
 
 use self::{
     context::Ctx,
@@ -26,6 +26,13 @@ pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<()
         (MonoType::Hole(ref_), _) => unify_hole(ctx, ref_, right, false),
 
         (_, MonoType::Hole(ref_)) => unify_hole(ctx, ref_, left, true),
+
+        (MonoType::Tuple(vec_l), MonoType::Tuple(vec_r)) if vec_l.len() == vec_r.len() => {
+            for (l, r) in vec_l.iter().zip(vec_r.iter()) {
+                unify(ctx.clone(), l.clone(), r.clone())?;
+            }
+            Ok(())
+        }
 
         (l, r) => ctx.error(format!("type mismatch between '{}' and '{}'", l, r)),
     }
@@ -57,9 +64,18 @@ impl Infer for Syntax {
         let ctx = ctx.set_position(self.location);
 
         match self.data {
+            Unit => Ok(MonoType::var("()".to_string())),
+
             Number(_) => Ok(MonoType::var("Int".to_string())),
 
             Boolean(_) => Ok(MonoType::var("Bool".to_string())),
+
+            Tuple(vec) => Ok(MonoType::Tuple(
+                vec.into_iter()
+                    .map(|e| e.infer(&ctx))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+            .into()),
 
             Identifier(x) => match ctx.lookup(&x) {
                 Some(sigma) => Ok(sigma.instantiate(ctx)),
@@ -113,8 +129,14 @@ impl Infer for Pattern {
     type Return<'a> = Result<(Rc<MonoType>, Ctx<'a>), Error<'a>>;
 
     fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a> {
-        let ctx = ctx.set_position(self.0.location);
         let syntax = self.0;
+        let ctx = ctx.set_position(syntax.location);
+
+        let mut res = HashSet::new();
+        if let Err(err) = collect_ids(&syntax, &mut res) {
+            let ctx = ctx.set_position(err.location);
+            return ctx.error(format!("identifier '{}' bound more than once", err));
+        };
 
         match syntax.data {
             Identifier(x) => match ctx.lookup(&x) {
@@ -126,7 +148,45 @@ impl Infer for Pattern {
                 }
             },
 
+            Tuple(vec) => {
+                let mut res = Vec::new();
+                let mut last_ctx = ctx.clone();
+
+                for e in vec {
+                    let (i, c) = Pattern(e).infer(&last_ctx)?;
+                    last_ctx = c;
+                    res.push(i);
+                }
+
+                Ok((MonoType::Tuple(res).into(), last_ctx))
+            }
+
             _ => syntax.infer(&ctx).map(|ret| (ret, ctx.clone())),
         }
     }
+}
+
+fn collect_ids<'a>(s: &'a Syntax, res: &mut HashSet<&'a str>) -> Result<(), &'a Syntax> {
+    match &s.data {
+        Identifier(x) => {
+            if !res.insert(x.as_str()) {
+                return Err(s);
+            }
+        }
+
+        Tuple(vec) => {
+            for e in vec {
+                collect_ids(e, res)?;
+            }
+        }
+
+        Unit => {}
+        Number(_) => {}
+        Boolean(_) => {}
+        Match(_, _) => todo!(),
+        Abstraction(_, _) => todo!(),
+        Application(_, _) => todo!(),
+        Let(_, _, _) => todo!(),
+    }
+    Ok(())
 }

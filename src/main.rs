@@ -9,8 +9,8 @@ use atiny::{
 fn main() {
     let code = "
         let b = |a| match a {
-            69 => 420,
-            n => n,
+            (69, 420) => 420,
+            (n, m) => n,
         };
         b
     ";

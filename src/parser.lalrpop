@@ -12,7 +12,14 @@ AtomItem: Item = {
     "true"             => Item::Boolean(true),
     "false"            => Item::Boolean(false),
     <id: Id>           => Item::Identifier(id),
-    "(" <t:Syntax> ")" => t.data,
+    "(" <mut t:Comma<Syntax>> ")" => {
+        let (mut vec, trailing) = t;
+        match vec.len() {
+            0 => Item::Unit,
+            1 if !trailing => vec.pop().unwrap().data,
+            _ => Item::Tuple(vec),
+        }
+    },
 }
 
 Atom: Syntax = Loc<AtomItem>;
@@ -33,7 +40,7 @@ Clauses = Comma<Clause>;
 SyntaxItem: Item = {
     "|" <t: Id> "|" <s:Syntax>                     => Item::Abstraction(t, Box::new(s)),
     "let" <t: Id> "=" <e:Syntax> ";" <next:Syntax> => Item::Let(t, Box::new(e), Box::new(next)),
-    "match" <pat:Syntax> "{" <c:Clauses> "}"       => Item::Match(Box::new(pat), c),
+    "match" <pat:Syntax> "{" <c:Clauses> "}"       => Item::Match(Box::new(pat), c.0),
     "if" "let" <pat:Atom> "=" <m:Syntax> 
         "{" <t:Syntax> "}" "else" 
         "{" <f:Syntax> "}"                         => Item::if_let(pat, m, t, f),
@@ -46,12 +53,11 @@ pub Syntax : Syntax = Loc<SyntaxItem>;
 Num: u64 = <s:r"[0-9]+">                   => u64::from_str(s).unwrap();
 Id: String = <s:r"[a-zA-Z_][a-zA-Z0-9_]*"> => s.to_string();
 
-Comma<T>: Vec<T> = {
-    <mut v:(<T> ",")*> <e:T?> => match e {
-        None => v,
-        Some(e) => {
-            v.push(e);
-            v
-        }
+Comma<T>: (Vec<T>, bool) = {
+    <mut v:(<T> ",")*> =>  (v, true),
+
+    <mut v:(<T> ",")*> <e:T> => {
+        v.push(e);
+        (v, false)
     }
 };

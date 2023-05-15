@@ -68,8 +68,10 @@ impl Display for Range {
 
 #[derive(Debug)]
 pub enum Item {
+    Unit,
     Number(u64),
     Boolean(bool),
+    Tuple(Vec<Syntax>),
     Identifier(String),
     Match(Box<Syntax>, Vec<Clause>),
     Abstraction(String, Box<Syntax>),
@@ -80,8 +82,10 @@ pub enum Item {
 impl Display for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Unit => write!(f, "()"),
             Self::Number(n) => write!(f, "{n}"),
             Self::Boolean(b) => write!(f, "{b}"),
+            Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Identifier(id) => write!(f, "{id}"),
             Self::Abstraction(p, e) => write!(f, "(|{p}| {e})"),
             Self::Application(fu, a) => write!(f, "({fu} {a})"),
