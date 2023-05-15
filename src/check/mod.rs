@@ -9,7 +9,10 @@ pub mod context;
 pub mod types;
 pub mod util;
 
-use crate::{error::Error, syntax::Syntax};
+use crate::{
+    error::Error,
+    syntax::{Item::*, Pattern, Syntax},
+};
 
 pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error<'_>> {
     match (&*left, &*right) {
@@ -42,48 +45,88 @@ fn unify_hole<'a>(
     Ok(())
 }
 
-pub fn infer<'a>(ctx: &Ctx<'a>, expr: Syntax) -> Result<Rc<MonoType>, Error<'a>> {
-    use crate::syntax::Item::*;
+pub trait Infer {
+    type Return<'a>;
+    fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a>;
+}
 
-    let ctx = ctx.set_position(expr.location);
+impl Infer for Syntax {
+    type Return<'a> = Result<Rc<MonoType>, Error<'a>>;
 
-    match expr.data {
-        Number(_) => Ok(MonoType::var("Int".to_string())),
+    fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a> {
+        let ctx = ctx.set_position(self.location);
 
-        Boolean(_) => Ok(MonoType::var("Bool".to_string())),
+        match self.data {
+            Number(_) => Ok(MonoType::var("Int".to_string())),
 
-        Identifier(x) => match ctx.lookup(&x) {
-            Some(sigma) => Ok(sigma.instantiate(ctx)),
-            None => ctx.error(format!("unbound variable '{}'", x)),
-        },
+            Boolean(_) => Ok(MonoType::var("Bool".to_string())),
 
-        Application(e0, e1) => {
-            let t0 = infer(&ctx, *e0)?;
-            let t1 = infer(&ctx, *e1)?;
+            Identifier(x) => match ctx.lookup(&x) {
+                Some(sigma) => Ok(sigma.instantiate(ctx)),
+                None => ctx.error(format!("unbound variable '{}'", x)),
+            },
 
-            let t_return = ctx.new_hole();
-            let function_type = MonoType::arrow(t1, t_return.clone());
+            Application(e0, e1) => {
+                let t0 = e0.infer(&ctx)?;
+                let t1 = e1.infer(&ctx)?;
 
-            unify(ctx, t0, function_type)?;
+                let t_return = ctx.new_hole();
+                let function_type = MonoType::arrow(t1, t_return.clone());
 
-            Ok(t_return)
+                unify(ctx, t0, function_type)?;
+
+                Ok(t_return)
+            }
+
+            Abstraction(x, e) => {
+                let t = ctx.new_hole();
+                let new_ctx = ctx.extend(x, t.to_poly());
+                let t_line = e.infer(&new_ctx)?;
+                Ok(MonoType::arrow(t, t_line))
+            }
+
+            Let(x, e0, e1) => {
+                let t = e0.infer(&ctx)?;
+                let t_generalized = t.generalize(ctx.clone());
+                let new_ctx = ctx.extend(x, t_generalized);
+
+                e1.infer(&new_ctx)
+            }
+
+            Match(e, clauses) => {
+                let pat_ty = e.infer(&ctx)?;
+                let ret_ty = ctx.new_hole();
+
+                for c in clauses {
+                    let (clause_pat, new_ctx) = c.pat.infer(&ctx)?;
+                    unify(ctx.clone(), pat_ty.clone(), clause_pat)?;
+                    unify(new_ctx.clone(), ret_ty.clone(), c.expr.infer(&new_ctx)?)?;
+                }
+
+                Ok(ret_ty)
+            }
         }
+    }
+}
 
-        Abstraction(x, e) => {
-            let t = ctx.new_hole();
-            let new_ctx = ctx.extend(x, t.to_poly());
-            let t_line = infer(&new_ctx, *e)?;
-            Ok(MonoType::arrow(t, t_line))
+impl Infer for Pattern {
+    type Return<'a> = Result<(Rc<MonoType>, Ctx<'a>), Error<'a>>;
+
+    fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a> {
+        let ctx = ctx.set_position(self.0.location);
+        let syntax = self.0;
+
+        match syntax.data {
+            Identifier(x) => match ctx.lookup(&x) {
+                Some(sigma) => Ok((sigma.instantiate(ctx.clone()), ctx)),
+                None => {
+                    let t = ctx.new_hole();
+                    let new_ctx = ctx.extend(x, t.to_poly());
+                    Ok((t, new_ctx))
+                }
+            },
+
+            _ => syntax.infer(&ctx).map(|ret| (ret, ctx.clone())),
         }
-
-        Let(x, e0, e1) => {
-            let t = infer(&ctx, *e0)?;
-            let t_generalized = t.generalize(ctx.clone());
-            let new_ctx = ctx.extend(x, t_generalized);
-
-            infer(&new_ctx, *e1)
-        }
-
-        Match(_, _) => todo!(),
     }
 }

@@ -93,11 +93,16 @@ impl Display for Item {
 
 impl Item {
     pub fn if_let(pattern: Syntax, matcher: Syntax, true_arm: Syntax, else_arm: Syntax) -> Self {
+        let else_pat = Syntax {
+            location: else_arm.location,
+            data: Item::Identifier("_".to_string()),
+        };
+
         Item::Match(
             Box::new(matcher),
             vec![
-                Clause::new(Pattern::Item(pattern.data), true_arm),
-                Clause::new(Pattern::Item(Item::Identifier("_".to_string())), else_arm),
+                Clause::new(Pattern(pattern), true_arm),
+                Clause::new(Pattern(else_pat), else_arm),
             ],
         )
     }
@@ -116,15 +121,11 @@ impl Display for Syntax {
 }
 
 #[derive(Debug)]
-pub enum Pattern {
-    Item(Item),
-}
+pub struct Pattern(pub Syntax);
 
 impl Display for Pattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Pattern::Item(i) => write!(f, "{i}"),
-        }
+        write!(f, "{}", self.0)
     }
 }
 

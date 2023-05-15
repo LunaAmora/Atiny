@@ -25,7 +25,7 @@ CallItem: Item = {
 Call: Syntax = Loc<CallItem>;
 
 Clause: Clause = {
-    <pat:Atom> "=>" <e:Syntax> => Clause::new(Pattern::Item(pat.data), e)
+    <pat:Atom> "=>" <e:Syntax> => Clause::new(Pattern(pat), e)
 }
 
 Clauses = Comma<Clause>;
