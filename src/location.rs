@@ -90,3 +90,12 @@ impl<T: Display> Display for Located<T> {
         write!(f, "{}", self.data)
     }
 }
+
+impl<T> Located<T> {
+    pub fn map<R>(self, f: impl Fn(T) -> R) -> Located<R> {
+        Located {
+            location: self.location,
+            data: f(self.data),
+        }
+    }
+}

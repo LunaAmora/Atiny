@@ -11,7 +11,7 @@ pub mod util;
 
 use crate::{
     error::Error,
-    syntax::tree::{Expr, ExprKind::*, Pattern, Type, TypeKind},
+    syntax::tree::{AtomKind, Expr, ExprKind, Pattern, PatternKind, Type, TypeKind},
 };
 
 pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error<'_>> {
@@ -52,39 +52,45 @@ fn unify_hole<'a>(
     Ok(())
 }
 
-pub trait Infer {
-    type Return<'a>;
-    fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a>;
+pub trait Infer<'a, 'b> {
+    type Return;
+    type Context;
+    fn infer(self, ctx: Self::Context) -> Self::Return;
 }
 
-impl Infer for Expr {
-    type Return<'a> = Result<Rc<MonoType>, Error<'a>>;
+impl<'a> Infer<'a, '_> for Expr {
+    type Return = Result<Rc<MonoType>, Error<'a>>;
+    type Context = Ctx<'a>;
 
-    fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a> {
+    fn infer(self, ctx: Self::Context) -> Self::Return {
+        use AtomKind::*;
+        use ExprKind::*;
         let ctx = ctx.set_position(self.location);
 
         match self.data {
-            Unit => Ok(MonoType::var("()".to_string())),
+            Atom(a) => match a {
+                Unit => Ok(MonoType::var("()".to_string())),
 
-            Number(_) => Ok(MonoType::var("Int".to_string())),
+                Number(_) => Ok(MonoType::var("Int".to_string())),
 
-            Boolean(_) => Ok(MonoType::var("Bool".to_string())),
+                Boolean(_) => Ok(MonoType::var("Bool".to_string())),
 
-            Tuple(vec) => Ok(MonoType::Tuple(
-                vec.into_iter()
-                    .map(|e| e.infer(&ctx))
-                    .collect::<Result<Vec<_>, _>>()?,
-            )
-            .into()),
+                Tuple(vec) => Ok(MonoType::Tuple(
+                    vec.into_iter()
+                        .map(|e| e.infer(ctx.clone()))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )
+                .into()),
 
-            Identifier(x) => match ctx.lookup(&x) {
-                Some(sigma) => Ok(sigma.instantiate(ctx)),
-                None => ctx.error(format!("unbound variable '{}'", x)),
+                Identifier(x) => match ctx.lookup(&x) {
+                    Some(sigma) => Ok(sigma.instantiate(ctx)),
+                    None => ctx.error(format!("unbound variable '{}'", x)),
+                },
             },
 
             Application(e0, e1) => {
-                let t0 = e0.infer(&ctx)?;
-                let t1 = e1.infer(&ctx)?;
+                let t0 = e0.infer(ctx.clone())?;
+                let t1 = e1.infer(ctx.clone())?;
 
                 let t_return = ctx.new_hole();
                 let function_type = MonoType::arrow(t1, t_return.clone());
@@ -97,34 +103,35 @@ impl Infer for Expr {
             Abstraction(x, e) => {
                 let t = ctx.new_hole();
                 let new_ctx = ctx.extend(x, t.to_poly());
-                let t_line = e.infer(&new_ctx)?;
+                let t_line = e.infer(new_ctx)?;
                 Ok(MonoType::arrow(t, t_line))
             }
 
             Let(x, e0, e1) => {
-                let t = e0.infer(&ctx)?;
+                let t = e0.infer(ctx.clone())?;
                 let t_generalized = t.generalize(ctx.clone());
                 let new_ctx = ctx.extend(x, t_generalized);
 
-                e1.infer(&new_ctx)
+                e1.infer(new_ctx)
             }
 
             Match(e, clauses) => {
-                let pat_ty = e.infer(&ctx)?;
+                let pat_ty = e.infer(ctx.clone())?;
                 let ret_ty = ctx.new_hole();
 
                 for c in clauses {
-                    let (clause_pat, new_ctx) = c.pat.infer(&ctx)?;
+                    let mut set = HashSet::new();
+                    let (clause_pat, new_ctx) = c.pat.infer((ctx.clone(), &mut set))?;
                     unify(ctx.clone(), pat_ty.clone(), clause_pat)?;
-                    unify(new_ctx.clone(), ret_ty.clone(), c.expr.infer(&new_ctx)?)?;
+                    unify(new_ctx.clone(), ret_ty.clone(), c.expr.infer(new_ctx)?)?;
                 }
 
                 Ok(ret_ty)
             }
 
             Annotation(expr, typ) => {
-                let typ_res = typ.infer(&ctx)?;
-                let expr_res = expr.infer(&ctx)?;
+                let typ_res = typ.infer(ctx.clone())?;
+                let expr_res = expr.infer(ctx.clone())?;
 
                 unify(ctx, expr_res, typ_res.clone())?;
 
@@ -134,57 +141,65 @@ impl Infer for Expr {
     }
 }
 
-impl Infer for Pattern {
-    type Return<'a> = Result<(Rc<MonoType>, Ctx<'a>), Error<'a>>;
+impl<'a, 'b> Infer<'a, 'b> for Pattern {
+    type Return = Result<(Rc<MonoType>, Ctx<'b>), Error<'b>>;
+    type Context = (Ctx<'b>, &'a mut HashSet<String>);
 
-    fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a> {
-        let syntax = self.0;
-        let ctx = ctx.set_position(syntax.location);
+    fn infer(self, (ctx, set): Self::Context) -> Self::Return {
+        use AtomKind::*;
+        let ctx = ctx.set_position(self.location);
 
-        let mut res = HashSet::new();
-        if let Err(err) = collect_ids(&syntax, &mut res) {
-            let ctx = ctx.set_position(err.location);
-            return ctx.error(format!("identifier '{}' bound more than once", err));
-        };
+        match self.data {
+            PatternKind::Atom(a) => match a {
+                Unit => Ok((MonoType::var("()".to_string()), ctx)),
 
-        match syntax.data {
-            Identifier(x) => match ctx.lookup(&x) {
-                Some(sigma) => Ok((sigma.instantiate(ctx.clone()), ctx)),
-                None => {
-                    let t = ctx.new_hole();
-                    let new_ctx = ctx.extend(x, t.to_poly());
-                    Ok((t, new_ctx))
+                Number(_) => Ok((MonoType::var("Int".to_string()), ctx)),
+
+                Boolean(_) => Ok((MonoType::var("Bool".to_string()), ctx)),
+
+                Identifier(x) => {
+                    if !set.insert(x.to_owned()) {
+                        return ctx.error(format!("identifier '{}' bound more than once", x));
+                    }
+
+                    match ctx.lookup(&x) {
+                        Some(sigma) => Ok((sigma.instantiate(ctx.clone()), ctx)),
+                        None => {
+                            let t = ctx.new_hole();
+                            let new_ctx = ctx.extend(x, t.to_poly());
+                            Ok((t, new_ctx))
+                        }
+                    }
+                }
+
+                Tuple(vec) => {
+                    let mut res = Vec::new();
+                    let mut last_ctx = ctx.clone();
+
+                    for e in vec {
+                        let (i, c) = e.infer((last_ctx, set))?;
+                        last_ctx = c;
+                        res.push(i);
+                    }
+
+                    Ok((MonoType::Tuple(res).into(), last_ctx))
                 }
             },
-
-            Tuple(vec) => {
-                let mut res = Vec::new();
-                let mut last_ctx = ctx.clone();
-
-                for e in vec {
-                    let (i, c) = Pattern(e).infer(&last_ctx)?;
-                    last_ctx = c;
-                    res.push(i);
-                }
-
-                Ok((MonoType::Tuple(res).into(), last_ctx))
-            }
-
-            _ => syntax.infer(&ctx).map(|ret| (ret, ctx.clone())),
         }
     }
 }
 
-impl Infer for Type {
-    type Return<'a> = Result<Rc<MonoType>, Error<'a>>;
+impl<'a> Infer<'a, '_> for Type {
+    type Return = Result<Rc<MonoType>, Error<'a>>;
+    type Context = Ctx<'a>;
 
-    fn infer<'a>(self, ctx: &Ctx<'a>) -> Self::Return<'a> {
+    fn infer(self, ctx: Self::Context) -> Self::Return {
         let ctx = ctx.set_position(self.location);
 
         match self.data {
             TypeKind::Arrow(arrow) => {
-                let left = arrow.left.infer(&ctx.clone())?;
-                let right = arrow.right.infer(&ctx.clone())?;
+                let left = arrow.left.infer(ctx.clone())?;
+                let right = arrow.right.infer(ctx)?;
                 Ok(MonoType::arrow(left, right))
             }
 
@@ -199,49 +214,26 @@ impl Infer for Type {
             TypeKind::Tuple(tuple) => {
                 let mut typ = Vec::new();
                 for el in tuple.types {
-                    typ.push(el.infer(&ctx.clone())?);
+                    typ.push(el.infer(ctx.clone())?);
                 }
                 Ok(MonoType::Tuple(typ).into())
             }
 
             TypeKind::Forall(forall) => {
                 let new_ctx = ctx.extend_types(&forall.args);
-                let mono = forall.body.infer(&new_ctx)?;
+                let mono = forall.body.infer(new_ctx)?;
+
                 let forall = TypeScheme {
                     names: forall.args,
                     mono,
                 };
+
                 Ok(forall.instantiate(ctx))
             }
 
             TypeKind::Application(_) => todo!(),
+
             TypeKind::Unit => todo!(),
         }
     }
-}
-
-fn collect_ids<'a>(s: &'a Expr, res: &mut HashSet<&'a str>) -> Result<(), &'a Expr> {
-    match &s.data {
-        Identifier(x) => {
-            if !res.insert(x.as_str()) {
-                return Err(s);
-            }
-        }
-
-        Tuple(vec) => {
-            for e in vec {
-                collect_ids(e, res)?;
-            }
-        }
-
-        Unit => {}
-        Number(_) => {}
-        Boolean(_) => {}
-        Match(_, _) => todo!(),
-        Abstraction(_, _) => todo!(),
-        Application(_, _) => todo!(),
-        Let(_, _, _) => todo!(),
-        Annotation(_, _) => todo!(),
-    }
-    Ok(())
 }

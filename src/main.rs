@@ -35,7 +35,7 @@ fn main() {
     let result_type = ExprParser::new()
         .parse(code)
         .map_err(|x| Error::from_lalrpop(x, code))
-        .and_then(|parsed| parsed.infer(&ctx))
+        .and_then(|parsed| parsed.infer(ctx))
         .unwrap_or_else(|err| {
             eprintln!("{}", err);
             exit(1)

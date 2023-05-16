@@ -9,12 +9,29 @@ use itertools::Itertools;
 use crate::location::Located;
 
 #[derive(Debug)]
-pub enum ExprKind {
+pub enum AtomKind<T> {
     Unit,
     Number(u64),
     Boolean(bool),
-    Tuple(Vec<Expr>),
+    Tuple(Vec<T>),
     Identifier(String),
+}
+
+impl<T: Display> Display for AtomKind<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unit => write!(f, "()"),
+            Self::Number(n) => write!(f, "{n}"),
+            Self::Boolean(b) => write!(f, "{b}"),
+            Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
+            Self::Identifier(id) => write!(f, "{id}"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ExprKind {
+    Atom(AtomKind<Expr>),
     Match(Box<Expr>, Vec<Clause>),
     Abstraction(String, Box<Expr>),
     Application(Box<Expr>, Box<Expr>),
@@ -25,11 +42,7 @@ pub enum ExprKind {
 impl Display for ExprKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unit => write!(f, "()"),
-            Self::Number(n) => write!(f, "{n}"),
-            Self::Boolean(b) => write!(f, "{b}"),
-            Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
-            Self::Identifier(id) => write!(f, "{id}"),
+            Self::Atom(a) => write!(f, "{}", a),
             Self::Abstraction(p, e) => write!(f, "(|{p}| {e})"),
             Self::Annotation(p, e) => write!(f, "({p} : {e})"),
             Self::Application(fu, a) => write!(f, "({fu} {a})"),
@@ -40,17 +53,17 @@ impl Display for ExprKind {
 }
 
 impl ExprKind {
-    pub fn if_let(pattern: Expr, matcher: Expr, true_arm: Expr, else_arm: Expr) -> Self {
-        let else_pat = Expr {
+    pub fn if_let(pattern: Pattern, matcher: Expr, true_arm: Expr, else_arm: Expr) -> Self {
+        let else_pat = Pattern {
             location: else_arm.location,
-            data: Self::Identifier("_".to_string()),
+            data: PatternKind::Atom(AtomKind::Identifier("_".to_string())),
         };
 
         Self::Match(
             Box::new(matcher),
             vec![
-                Clause::new(Pattern(pattern), true_arm),
-                Clause::new(Pattern(else_pat), else_arm),
+                Clause::new(pattern, true_arm),
+                Clause::new(else_pat, else_arm),
             ],
         )
     }
@@ -63,13 +76,19 @@ pub type Expr = Located<ExprKind>;
 /// A pattern is a syntactic element that goes inside pattern match declarations and are used to
 /// match on values and destruct them.
 #[derive(Debug)]
-pub struct Pattern(pub Expr);
+pub enum PatternKind {
+    Atom(AtomKind<Pattern>),
+}
 
-impl Display for Pattern {
+impl Display for PatternKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            PatternKind::Atom(i) => write!(f, "{}", i),
+        }
     }
 }
+
+pub type Pattern = Located<PatternKind>;
 
 /// This is a clause of a pattern match declaration. It contains a pattern and an expression that is
 /// the result of the match.
