@@ -1,10 +1,9 @@
-use std::process::exit;
-
 use atiny::{
     check::{context::Ctx, types::MonoType, Infer},
     error::Error,
     parser::ExprParser,
 };
+use std::process::exit;
 
 fn main() {
     let code = "

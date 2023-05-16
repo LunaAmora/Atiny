@@ -1,12 +1,12 @@
 //! This module describes the first tree that is generated from the parser. It's a tree that contains
-//! pure syntatic information due the origin. The main types of this file are [Expr], [Pattern] and
+//! pure syntactic information due the origin. The main types of this file are [Expr], [Pattern] and
 //! [TopLevel]
 
 use std::fmt::{self, Display};
 
 use itertools::Itertools;
 
-use crate::location::{Located};
+use crate::location::Located;
 
 #[derive(Debug)]
 pub enum ExprKind {
@@ -43,10 +43,10 @@ impl ExprKind {
     pub fn if_let(pattern: Expr, matcher: Expr, true_arm: Expr, else_arm: Expr) -> Self {
         let else_pat = Expr {
             location: else_arm.location,
-            data: ExprKind::Identifier("_".to_string()),
+            data: Self::Identifier("_".to_string()),
         };
 
-        ExprKind::Match(
+        Self::Match(
             Box::new(matcher),
             vec![
                 Clause::new(Pattern(pattern), true_arm),
@@ -56,11 +56,11 @@ impl ExprKind {
     }
 }
 
-/// An atiny expression is some syntatic element that intrinsically has a value. It can be a literal
+/// An atiny expression is some syntactic element that intrinsically has a value. It can be a literal
 /// value, a variable, a function call, a function definition and etc.
 pub type Expr = Located<ExprKind>;
 
-/// A pattern is a syntatic element that goes inside pattern match declarations and are used to
+/// A pattern is a syntactic element that goes inside pattern match declarations and are used to
 /// match on values and destruct them.
 #[derive(Debug)]
 pub struct Pattern(pub Expr);
@@ -111,18 +111,19 @@ pub struct VariableNode {
 impl Display for VariableNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
-    } 
+    }
 }
 
 #[derive(Debug)]
 pub struct ForallNode {
     pub args: Vec<String>,
     pub body: Box<Type>,
-} 
+}
 
 impl Display for ForallNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(forall ({}) . {})", self.args.iter().join(" "), self.body)
+        let args = self.args.iter().join(" ");
+        write!(f, "(forall ({}) . {})", args, self.body)
     }
 }
 
@@ -156,7 +157,7 @@ pub enum TypeKind {
     Forall(ForallNode),
     Application(TypeApplicationNode),
     Tuple(TypeTupleNode),
-    Unit
+    Unit,
 }
 
 impl Display for TypeKind {
@@ -184,19 +185,19 @@ pub struct Constructor {
 pub struct TypeDecl {
     pub name: String,
     pub types: Vec<String>,
-    pub constructors: Vec<Constructor>
+    pub constructors: Vec<Constructor>,
 }
 
 #[derive(Debug)]
 pub struct LetDecl {
     pub name: String,
-    pub expr: Box<Expr>
+    pub expr: Box<Expr>,
 }
 
 #[derive(Debug)]
 pub enum TopLevelKind {
     TypeDecl(TypeDecl),
-    LetDecl(LetDecl)
+    LetDecl(LetDecl),
 }
 
 /// It's a declaration on the top level of the program. It can be a function definition, a type

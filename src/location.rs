@@ -80,12 +80,12 @@ impl Display for Range {
 }
 
 #[derive(Debug)]
-pub struct Located<T>{
+pub struct Located<T> {
     pub location: ByteRange,
     pub data: T,
 }
 
-impl<T> Display for Located<T> where T : Display {
+impl<T: Display> Display for Located<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.data)
     }

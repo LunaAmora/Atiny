@@ -52,7 +52,7 @@ Clauses = Comma<Clause>;
 
 ExprItem: ExprKind = {
     "|" <t: Id> "|" <s:Expr>                     => ExprKind::Abstraction(t, Box::new(s)),
-    "let" <t: Id> "=" <e:Expr> ";" <next:Expr> => ExprKind::Let(t, Box::new(e), Box::new(next)),
+    "let" <t: Id> "=" <e:Expr> ";" <next:Expr>   => ExprKind::Let(t, Box::new(e), Box::new(next)),
     "match" <pat:Expr> "{" <c:Clauses> "}"       => ExprKind::Match(Box::new(pat), c.0),
     "if" "let" <pat:Atom> "=" <m:Expr>
         "{" <t:Expr> "}" "else"

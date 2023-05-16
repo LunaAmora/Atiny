@@ -121,6 +121,7 @@ impl Infer for Expr {
 
                 Ok(ret_ty)
             }
+
             Annotation(expr, typ) => {
                 let typ_res = typ.infer(&ctx)?;
                 let expr_res = expr.infer(&ctx)?;
@@ -128,7 +129,7 @@ impl Infer for Expr {
                 unify(ctx, expr_res, typ_res.clone())?;
 
                 Ok(typ_res)
-            },
+            }
         }
     }
 }
@@ -185,33 +186,38 @@ impl Infer for Type {
                 let left = arrow.left.infer(&ctx.clone())?;
                 let right = arrow.right.infer(&ctx.clone())?;
                 Ok(MonoType::arrow(left, right))
-            },
+            }
+
             TypeKind::Variable(v) => {
                 if ctx.typ_map.contains(&v.name) {
-                    Ok(MonoType::var(v.name.clone()))
+                    Ok(MonoType::var(v.name))
                 } else {
                     ctx.error(format!("unbound type variable '{}'", v.name))
                 }
             }
+
             TypeKind::Tuple(tuple) => {
                 let mut typ = Vec::new();
                 for el in tuple.types {
                     typ.push(el.infer(&ctx.clone())?);
                 }
                 Ok(MonoType::Tuple(typ).into())
-            },
+            }
+
             TypeKind::Forall(forall) => {
                 let new_ctx = ctx.extend_types(&forall.args);
                 let mono = forall.body.infer(&new_ctx)?;
-                let forall = TypeScheme { names: forall.args, mono };
+                let forall = TypeScheme {
+                    names: forall.args,
+                    mono,
+                };
                 Ok(forall.instantiate(ctx))
-            },
+            }
+
             TypeKind::Application(_) => todo!(),
             TypeKind::Unit => todo!(),
         }
     }
-
-    
 }
 
 fn collect_ids<'a>(s: &'a Expr, res: &mut HashSet<&'a str>) -> Result<(), &'a Expr> {
