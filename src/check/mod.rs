@@ -44,11 +44,52 @@ fn unify_hole<'a>(
     other: Rc<MonoType>,
     swap: bool,
 ) -> Result<(), Error<'a>> {
+    match check_hole_overlap(hole, other.clone()) {
+        Ok(()) => {}
+        Err(UnifyError::CantUnify) => return Ok(()),
+        Err(UnifyError::Cyclic) => {
+            return ctx.error("found cyclic type of infinite size".to_owned())
+        }
+    }
+
     match hole.get() {
         Hole::Empty => hole.fill(other),
         Hole::Filled(filled) if swap => return unify(ctx, other, filled),
         Hole::Filled(filled) => return unify(ctx, filled, other),
     }
+    Ok(())
+}
+
+enum UnifyError {
+    CantUnify,
+    Cyclic,
+}
+
+fn check_hole_overlap(hole: &Ref, other: Rc<MonoType>) -> Result<(), UnifyError> {
+    match &*other {
+        MonoType::Hole(other) => {
+            if hole.name() == other.name() {
+                return Err(UnifyError::CantUnify);
+            }
+        }
+
+        MonoType::Tuple(vec) => {
+            for mono in vec {
+                check_hole_overlap(hole, mono.clone()).map_err(|e| match e {
+                    UnifyError::CantUnify => UnifyError::Cyclic,
+                    UnifyError::Cyclic => UnifyError::Cyclic,
+                })?
+            }
+        }
+
+        MonoType::Arrow(l, r) => {
+            check_hole_overlap(hole, l.clone())?;
+            check_hole_overlap(hole, r.clone())?;
+        }
+
+        MonoType::Var(_) => {}
+    }
+
     Ok(())
 }
 

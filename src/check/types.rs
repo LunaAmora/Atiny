@@ -1,7 +1,7 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
-    fmt,
+    fmt::{self, Display},
     hash::{Hash, Hasher},
     ptr::addr_of,
     rc::Rc,
@@ -30,7 +30,7 @@ impl TypeScheme {
     }
 }
 
-impl fmt::Display for TypeScheme {
+impl Display for TypeScheme {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "forall ")?;
 
@@ -49,6 +49,15 @@ impl fmt::Display for TypeScheme {
 pub enum Hole {
     Empty,
     Filled(Rc<MonoType>),
+}
+
+impl Display for Hole {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Hole::Empty => write!(f, "Hole"),
+            Hole::Filled(a) => write!(f, "Filled[{}]", a),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +84,13 @@ impl PartialEq for Ref {
     }
 }
 
+impl Display for Ref {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let a = self.0.borrow();
+        write!(f, "(ref {}, {})", a.name, a.data)
+    }
+}
+
 impl Eq for Ref {}
 
 impl Hash for Ref {
@@ -84,6 +100,10 @@ impl Hash for Ref {
 }
 
 impl Ref {
+    pub fn name(&self) -> String {
+        self.0.borrow().name.to_owned()
+    }
+
     pub fn identifier(&self) -> u64 {
         addr_of!(*self.0.as_ref().borrow()) as u64
     }
@@ -120,7 +140,7 @@ pub enum MonoType {
     Hole(Ref),
 }
 
-impl fmt::Display for MonoType {
+impl Display for MonoType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Var(name) => write!(f, "{}", name),
