@@ -54,8 +54,8 @@ pub enum Hole {
 impl Display for Hole {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Hole::Empty(n) => write!(f, "Hole<{n}>"),
-            Hole::Filled(a) => write!(f, "Filled[{}]", a),
+            Self::Empty(n) => write!(f, "Hole<{n}>"),
+            Self::Filled(a) => write!(f, "Filled[{}]", a),
         }
     }
 }

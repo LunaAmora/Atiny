@@ -61,7 +61,7 @@ fn unify_hole<'a>(
                     _ => hole.fill(other),
                 }
             } else {
-                hole.fill(other)
+                hole.fill(other);
             }
         }
         Hole::Filled(filled) if swap => return unify(ctx, other, filled),
@@ -96,7 +96,7 @@ fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), UnifyE
                 occur_check(hole, lvl, mono.clone()).map_err(|e| match e {
                     UnifyError::CantUnify => UnifyError::Cyclic,
                     UnifyError::Cyclic => UnifyError::Cyclic,
-                })?
+                })?;
             }
         }
 

@@ -83,7 +83,7 @@ pub enum PatternKind {
 impl Display for PatternKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PatternKind::Atom(i) => write!(f, "{}", i),
+            Self::Atom(i) => write!(f, "{}", i),
         }
     }
 }
