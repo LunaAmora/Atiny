@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{RefCell, RefMut},
     collections::HashMap,
     fmt::{self, Display},
     hash::{Hash, Hasher},
@@ -23,7 +23,7 @@ impl TypeScheme {
             .names
             .iter()
             .cloned()
-            .map(|x| (x, MonoType::new_hole(ctx.new_name())))
+            .map(|x| (x, MonoType::new_hole(ctx.new_name(), ctx.level)))
             .collect::<HashMap<String, Rc<MonoType>>>();
 
         self.mono.substitute(&substitutions)
@@ -47,14 +47,14 @@ impl Display for TypeScheme {
 
 #[derive(Debug, Clone)]
 pub enum Hole {
-    Empty,
+    Empty(usize),
     Filled(Rc<MonoType>),
 }
 
 impl Display for Hole {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Hole::Empty => write!(f, "Hole"),
+            Hole::Empty(n) => write!(f, "Hole<{n}>"),
             Hole::Filled(a) => write!(f, "Filled[{}]", a),
         }
     }
@@ -67,10 +67,10 @@ pub struct RefItem {
 }
 
 impl RefItem {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, level: usize) -> Self {
         Self {
             name,
-            data: Hole::Empty,
+            data: Hole::Empty(level),
         }
     }
 }
@@ -108,10 +108,10 @@ impl Ref {
         addr_of!(*self.0.as_ref().borrow()) as u64
     }
 
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, level: usize) -> Self {
         Self(Rc::new(RefCell::new(RefItem {
             name,
-            data: Hole::Empty,
+            data: Hole::Empty(level),
         })))
     }
 
@@ -120,7 +120,7 @@ impl Ref {
     }
 
     pub fn is_empty(&self) -> bool {
-        matches!(self.0.borrow().data, Hole::Empty)
+        matches!(self.0.borrow().data, Hole::Empty(_))
     }
 
     pub fn is_filled(&self) -> bool {
@@ -129,6 +129,10 @@ impl Ref {
 
     pub fn get(&self) -> Hole {
         self.0.borrow().data.clone()
+    }
+
+    pub fn get_item(&self) -> RefMut<RefItem> {
+        self.0.as_ref().borrow_mut()
     }
 }
 
@@ -148,7 +152,7 @@ impl Display for MonoType {
             Self::Arrow(from, to) => write!(f, "({} -> {})", from, to),
             Self::Hole(item) => match item.get() {
                 Hole::Filled(typ) => write!(f, "{}", typ),
-                Hole::Empty => write!(f, "^{}", item.0.borrow().name),
+                Hole::Empty(lvl) => write!(f, "^{lvl}~{}", item.0.borrow().name),
             },
         }
     }
@@ -172,7 +176,7 @@ impl MonoType {
 
             Self::Hole(item) => match item.get() {
                 Hole::Filled(typ) => typ.substitute(substs),
-                Hole::Empty => Rc::new(Self::Hole(item.clone())),
+                Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
         }
     }
@@ -193,8 +197,8 @@ impl MonoType {
         Rc::new(Self::Arrow(from, to))
     }
 
-    pub fn new_hole(name: String) -> Rc<Self> {
-        Rc::new(Self::Hole(Ref::new(name)))
+    pub fn new_hole(name: String, level: usize) -> Rc<Self> {
+        Rc::new(Self::Hole(Ref::new(name, level)))
     }
 
     pub fn generalize_type(&self, ctx: Ctx, holes: &mut HashMap<Ref, String>) -> Rc<Self> {
@@ -214,11 +218,11 @@ impl MonoType {
 
             Self::Hole(item) => match item.get() {
                 Hole::Filled(typ) => typ.generalize_type(ctx, holes),
-
-                Hole::Empty => {
+                Hole::Empty(lvl) if lvl > ctx.level => {
                     let name = holes.entry(item.clone()).or_insert_with(|| ctx.new_name());
                     Self::var(name.clone())
                 }
+                Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
         }
     }

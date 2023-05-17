@@ -23,9 +23,9 @@ pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<()
             unify(ctx, r.clone(), r1.clone())
         }
 
-        (MonoType::Hole(ref_), _) => unify_hole(ctx, ref_, right, false),
+        (MonoType::Hole(ref_), _) => unify_hole(ctx, left.clone(), ref_, right, false),
 
-        (_, MonoType::Hole(ref_)) => unify_hole(ctx, ref_, left, true),
+        (_, MonoType::Hole(ref_)) => unify_hole(ctx, right.clone(), ref_, left, true),
 
         (MonoType::Tuple(vec_l), MonoType::Tuple(vec_r)) if vec_l.len() == vec_r.len() => {
             for (l, r) in vec_l.iter().zip(vec_r.iter()) {
@@ -40,20 +40,30 @@ pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<()
 
 fn unify_hole<'a>(
     ctx: Ctx<'a>,
+    typ: Rc<MonoType>,
     hole: &Ref,
     other: Rc<MonoType>,
     swap: bool,
 ) -> Result<(), Error<'a>> {
-    match check_hole_overlap(hole, other.clone()) {
-        Ok(()) => {}
-        Err(UnifyError::CantUnify) => return Ok(()),
-        Err(UnifyError::Cyclic) => {
-            return ctx.error("found cyclic type of infinite size".to_owned())
-        }
-    }
-
     match hole.get() {
-        Hole::Empty => hole.fill(other),
+        Hole::Empty(u) => {
+            match occur_check(hole, u, other.clone()) {
+                Ok(()) => {}
+                Err(UnifyError::CantUnify) => return Ok(()),
+                Err(UnifyError::Cyclic) => {
+                    return ctx.error("found cyclic type of infinite size".to_owned())
+                }
+            }
+
+            if let MonoType::Hole(hole_) = &&*other {
+                match hole_.get() {
+                    Hole::Empty(l) if u < l => hole_.fill(typ),
+                    _ => hole.fill(other),
+                }
+            } else {
+                hole.fill(other)
+            }
+        }
         Hole::Filled(filled) if swap => return unify(ctx, other, filled),
         Hole::Filled(filled) => return unify(ctx, filled, other),
     }
@@ -65,17 +75,25 @@ enum UnifyError {
     Cyclic,
 }
 
-fn check_hole_overlap(hole: &Ref, other: Rc<MonoType>) -> Result<(), UnifyError> {
+fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), UnifyError> {
     match &*other {
         MonoType::Hole(other) => {
-            if hole.name() == other.name() {
+            if hole == other {
                 return Err(UnifyError::CantUnify);
+            }
+
+            match other.get() {
+                Hole::Empty(lvl2) if lvl2 > lvl => {
+                    hole.get_item().data = Hole::Empty(lvl);
+                }
+                Hole::Filled(t) => occur_check(hole, lvl, t)?,
+                _ => (),
             }
         }
 
         MonoType::Tuple(vec) => {
             for mono in vec {
-                check_hole_overlap(hole, mono.clone()).map_err(|e| match e {
+                occur_check(hole, lvl, mono.clone()).map_err(|e| match e {
                     UnifyError::CantUnify => UnifyError::Cyclic,
                     UnifyError::Cyclic => UnifyError::Cyclic,
                 })?
@@ -83,8 +101,8 @@ fn check_hole_overlap(hole: &Ref, other: Rc<MonoType>) -> Result<(), UnifyError>
         }
 
         MonoType::Arrow(l, r) => {
-            check_hole_overlap(hole, l.clone())?;
-            check_hole_overlap(hole, r.clone())?;
+            occur_check(hole, lvl, l.clone())?;
+            occur_check(hole, lvl, r.clone())?;
         }
 
         MonoType::Var(_) => {}
@@ -149,8 +167,9 @@ impl<'a> Infer<'a, '_> for Expr {
             }
 
             Let(x, e0, e1) => {
-                let t = e0.infer(ctx.clone())?;
+                let t = e0.infer(ctx.level_up())?;
                 let t_generalized = t.generalize(ctx.clone());
+
                 let new_ctx = ctx.extend(x, t_generalized);
 
                 e1.infer(new_ctx)

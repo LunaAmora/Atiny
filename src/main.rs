@@ -7,8 +7,13 @@ use std::process::exit;
 
 fn main() {
     let code = "
-        let b = |x| x;
-        (b : forall x. x -> x)
+        |x| match a {
+            b => |x| true,
+            c => {
+              let d = |x| c;
+              d
+            }
+          }
     ";
 
     let ctx = Ctx::new(code);

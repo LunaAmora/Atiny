@@ -14,6 +14,7 @@ pub struct Ctx<'a> {
     pub typ_map: im_rc::HashSet<String>,
     pub code: &'a str,
     pub location: ByteRange,
+    pub level: usize,
 }
 
 impl<'a> Ctx<'a> {
@@ -24,36 +25,35 @@ impl<'a> Ctx<'a> {
             typ_map: Default::default(),
             code,
             location: Default::default(),
+            level: 0,
         }
     }
 
     pub fn extend(&self, name: String, typ: Rc<TypeScheme>) -> Self {
         Self {
-            counter: self.counter.clone(),
             map: self.map.update(name, typ),
-            code: self.code,
-            location: self.location,
-            typ_map: self.typ_map.clone(),
+            ..self.clone()
         }
     }
 
     pub fn extend_type(&self, name: String) -> Self {
         Self {
-            counter: self.counter.clone(),
-            map: self.map.clone(),
-            code: self.code,
-            location: self.location,
             typ_map: self.typ_map.update(name),
+            ..self.clone()
         }
     }
 
     pub fn extend_types(&self, names: &[String]) -> Self {
         Self {
-            counter: self.counter.clone(),
-            map: self.map.clone(),
-            code: self.code,
-            location: self.location,
             typ_map: self.typ_map.clone().union(names.iter().cloned().collect()),
+            ..self.clone()
+        }
+    }
+
+    pub fn level_up(&self) -> Self {
+        Self {
+            level: self.level + 1,
+            ..self.clone()
         }
     }
 
@@ -77,6 +77,6 @@ impl<'a> Ctx<'a> {
     }
 
     pub fn new_hole(&self) -> Rc<MonoType> {
-        MonoType::new_hole(self.new_name())
+        MonoType::new_hole(self.new_name(), self.level)
     }
 }
