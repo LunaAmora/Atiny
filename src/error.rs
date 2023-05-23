@@ -26,7 +26,7 @@ impl<'a> Error<'a> {
             InvalidToken { location } => {
                 Error::new("Invalid token", Range::singleton(location, code), code)
             }
-            UnrecognizedEOF { location, .. } => {
+            UnrecognizedEof { location, .. } => {
                 Error::new("unrecognized eof", Range::singleton(location, code), code)
             }
             UnrecognizedToken { token, .. } => {

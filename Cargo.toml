@@ -7,9 +7,9 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lalrpop-util = {version = "0.19.12", features = ["lexer"]}
+lalrpop-util = {version = "0.20.0", default-features = false, features = ["lexer", "unicode"]}
 im-rc = "*"
 itertools = "0.10.5"
 
 [build-dependencies]
-lalrpop = {version = "0.19.12", features = ["lexer"]}
+lalrpop = {version = "0.20.0", default-features = false, features = ["lexer", "unicode"]}
