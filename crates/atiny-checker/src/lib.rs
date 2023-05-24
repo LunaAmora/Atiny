@@ -164,8 +164,8 @@ impl<'a> Infer<'a, '_> for Expr {
             }
 
             Let(x, e0, e1) => {
-                let ctx = ctx.level_up();
-                let t = e0.infer(ctx.clone())?;
+                let lvl_ctx = ctx.level_up();
+                let t = e0.infer(lvl_ctx.clone())?;
                 let t_generalized = t.generalize(ctx.clone());
 
                 let new_ctx = ctx.extend(x, t_generalized);
