@@ -3,6 +3,7 @@ use std::{collections::HashSet, rc::Rc};
 use self::{
     context::Ctx,
     types::{Hole, MonoType, Ref, TypeScheme},
+    util::UnifyResult,
 };
 
 pub mod context;
@@ -23,9 +24,11 @@ pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<()
             unify(ctx, r.clone(), r1.clone())
         }
 
-        (MonoType::Hole(ref_), _) => unify_hole(ctx, left.clone(), ref_, right, false),
+        (MonoType::Hole(l), MonoType::Hole(r)) if l == r => Ok(()),
 
-        (_, MonoType::Hole(ref_)) => unify_hole(ctx, right.clone(), ref_, left, true),
+        (MonoType::Hole(_), _) => unify_hole(ctx, left.clone(), right, false),
+
+        (_, MonoType::Hole(_)) => unify_hole(ctx, right.clone(), left, true),
 
         (MonoType::Tuple(vec_l), MonoType::Tuple(vec_r)) if vec_l.len() == vec_r.len() => {
             for (l, r) in vec_l.iter().zip(vec_r.iter()) {
@@ -38,30 +41,36 @@ pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<()
     }
 }
 
-fn unify_hole<'a>(
-    ctx: Ctx<'a>,
-    typ: Rc<MonoType>,
-    hole: &Ref,
+fn unify_hole(
+    ctx: Ctx<'_>,
+    hole: Rc<MonoType>,
     other: Rc<MonoType>,
     swap: bool,
-) -> Result<(), Error<'a>> {
-    match hole.get() {
-        Hole::Empty(u) => {
-            match occur_check(hole, u, other.clone()) {
-                Ok(()) => {}
-                Err(UnifyError::CantUnify) => return Ok(()),
-                Err(UnifyError::Cyclic) => {
+) -> Result<(), Error<'_>> {
+    let MonoType::Hole(ref_) = &*hole else {
+        panic!("Hole should be a `MonoType::Hole`");
+    };
+
+    match ref_.get() {
+        Hole::Empty(lvl) => {
+            match occur_check(ref_, other.clone()) {
+                UnifyResult::Ok => {}
+                UnifyResult::CantUnify => return Ok(()),
+                UnifyResult::Cyclic => {
                     return ctx.error("found cyclic type of infinite size".to_owned())
                 }
             }
 
-            if let MonoType::Hole(hole_) = &&*other {
-                match hole_.get() {
-                    Hole::Empty(l) if u < l => hole_.fill(typ),
-                    _ => hole.fill(other),
+            if let MonoType::Hole(oth_ref) = &*other {
+                match oth_ref.get() {
+                    Hole::Empty(lvl2) if lvl2 > lvl => {
+                        ref_.get_item().data = Hole::Empty(lvl2);
+                        oth_ref.fill(hole);
+                    }
+                    _ => ref_.fill(other),
                 }
             } else {
-                hole.fill(other);
+                ref_.fill(other);
             }
         }
         Hole::Filled(filled) if swap => return unify(ctx, other, filled),
@@ -70,45 +79,33 @@ fn unify_hole<'a>(
     Ok(())
 }
 
-enum UnifyError {
-    CantUnify,
-    Cyclic,
-}
-
-fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), UnifyError> {
+fn occur_check(hole: &Ref, other: Rc<MonoType>) -> UnifyResult {
     match &*other {
         MonoType::Hole(other) => {
             if hole == other {
-                return Err(UnifyError::CantUnify);
+                return UnifyResult::CantUnify;
             }
 
-            match other.get() {
-                Hole::Empty(lvl2) if lvl2 > lvl => {
-                    hole.get_item().data = Hole::Empty(lvl);
-                }
-                Hole::Filled(t) => occur_check(hole, lvl, t)?,
-                _ => (),
+            if let Hole::Filled(filled) = other.get() {
+                occur_check(hole, filled)?;
             }
         }
 
         MonoType::Tuple(vec) => {
-            for mono in vec {
-                occur_check(hole, lvl, mono.clone()).map_err(|e| match e {
-                    UnifyError::CantUnify => UnifyError::Cyclic,
-                    UnifyError::Cyclic => UnifyError::Cyclic,
-                })?;
+            for mono in vec.clone() {
+                occur_check(hole, mono)?;
             }
         }
 
         MonoType::Arrow(l, r) => {
-            occur_check(hole, lvl, l.clone())?;
-            occur_check(hole, lvl, r.clone())?;
+            occur_check(hole, l.clone())?;
+            occur_check(hole, r.clone())?;
         }
 
         MonoType::Var(_) => {}
     }
 
-    Ok(())
+    UnifyResult::Ok
 }
 
 pub trait Infer<'a, 'b> {

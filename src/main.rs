@@ -7,13 +7,14 @@ use std::process::exit;
 
 fn main() {
     let code = "
-        |x| match a {
-            b => |x| true,
+        |a| match a {
+            b => |x| |y| b,
             c => {
               let d = |x| c;
-              d
+              let e = |y| d;
+              e
             }
-          }
+        }
     ";
 
     let ctx = Ctx::new(code);

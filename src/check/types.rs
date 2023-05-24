@@ -86,8 +86,8 @@ impl PartialEq for Ref {
 
 impl Display for Ref {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let a = self.0.borrow();
-        write!(f, "(ref {}, {})", a.name, a.data)
+        let item = self.0.borrow();
+        write!(f, "ref {{{}, {}}}", item.name, item.data)
     }
 }
 
@@ -100,10 +100,6 @@ impl Hash for Ref {
 }
 
 impl Ref {
-    pub fn name(&self) -> String {
-        self.0.borrow().name.to_owned()
-    }
-
     pub fn identifier(&self) -> u64 {
         addr_of!(*self.0.as_ref().borrow()) as u64
     }
@@ -152,6 +148,7 @@ impl Display for MonoType {
             Self::Arrow(from, to) => write!(f, "({} -> {})", from, to),
             Self::Hole(item) => match item.get() {
                 Hole::Filled(typ) => write!(f, "{}", typ),
+                Hole::Empty(0) => write!(f, "^{}", item.0.borrow().name),
                 Hole::Empty(lvl) => write!(f, "^{lvl}~{}", item.0.borrow().name),
             },
         }
