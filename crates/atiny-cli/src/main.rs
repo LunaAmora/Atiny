@@ -1,9 +1,7 @@
-use atiny::{
-    check::{context::Ctx, types::MonoType, Infer},
-    error::Error,
-    parser::ExprParser,
-};
 use std::process::exit;
+
+use atiny_checker::{context::Ctx, types::MonoType, Infer};
+use atiny_parser::{error::from_lalrpop, ExprParser};
 
 fn main() {
     let code = "
@@ -40,7 +38,7 @@ fn main() {
 
     let result_type = ExprParser::new()
         .parse(code)
-        .map_err(|x| Error::from_lalrpop(x, code))
+        .map_err(|x| from_lalrpop(x, code))
         .and_then(|parsed| parsed.infer(ctx))
         .unwrap_or_else(|err| {
             eprintln!("{}", err);

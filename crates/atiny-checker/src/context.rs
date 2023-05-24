@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{error::Error, location::ByteRange};
+use atiny_error::Error;
+use atiny_location::ByteRange;
 
 use super::{
     types::{MonoType, TypeScheme},

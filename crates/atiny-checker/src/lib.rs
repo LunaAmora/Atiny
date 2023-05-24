@@ -1,4 +1,9 @@
+#![feature(try_trait_v2)]
+
 use std::{collections::HashSet, rc::Rc};
+
+use atiny_error::Error;
+use atiny_tree::r#abstract::*;
 
 use self::{
     context::Ctx,
@@ -9,11 +14,6 @@ use self::{
 pub mod context;
 pub mod types;
 pub mod util;
-
-use crate::{
-    error::Error,
-    syntax::tree::{AtomKind, Expr, ExprKind, Pattern, PatternKind, Type, TypeKind},
-};
 
 pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error<'_>> {
     match (&*left, &*right) {
