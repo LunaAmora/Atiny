@@ -64,7 +64,7 @@ fn unify_hole(
             if let MonoType::Hole(oth_ref) = &*other {
                 match oth_ref.get() {
                     Hole::Empty(lvl2) if lvl2 > lvl => {
-                        ref_.get_item().data = Hole::Empty(lvl2);
+                        ref_.get_item().data = Hole::Empty(lvl);
                         oth_ref.fill(hole);
                     }
                     _ => ref_.fill(other),
