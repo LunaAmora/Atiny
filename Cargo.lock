@@ -15,10 +15,53 @@ dependencies = [
 name = "atiny"
 version = "0.1.0"
 dependencies = [
+ "atiny-checker",
+ "atiny-error",
+ "atiny-location",
+ "atiny-parser",
+ "atiny-tree",
+]
+
+[[package]]
+name = "atiny-checker"
+version = "0.1.0"
+dependencies = [
+ "atiny-error",
+ "atiny-location",
+ "atiny-tree",
  "im-rc",
+ "itertools",
+]
+
+[[package]]
+name = "atiny-error"
+version = "0.1.0"
+dependencies = [
+ "atiny-location",
+]
+
+[[package]]
+name = "atiny-location"
+version = "0.1.0"
+
+[[package]]
+name = "atiny-parser"
+version = "0.1.0"
+dependencies = [
+ "atiny-error",
+ "atiny-location",
+ "atiny-tree",
  "itertools",
  "lalrpop",
  "lalrpop-util",
+]
+
+[[package]]
+name = "atiny-tree"
+version = "0.1.0"
+dependencies = [
+ "atiny-location",
+ "itertools",
 ]
 
 [[package]]

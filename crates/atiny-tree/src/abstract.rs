@@ -1,12 +1,11 @@
 //! This module describes the first tree that is generated from the parser. It's a tree that contains
 //! pure syntactic information due the origin. The main types of this file are [Expr], [Pattern] and
-//! [TopLevel]
+//! [TopLevel].
 
 use std::fmt::{self, Display};
 
+use atiny_location::Located;
 use itertools::Itertools;
-
-use crate::location::Located;
 
 #[derive(Debug)]
 pub enum AtomKind<T> {

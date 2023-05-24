@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use crate::syntax::tree::*;
-use crate::location::*;
+use atiny_tree::r#abstract::*;
+use atiny_location::*;
 
 grammar;
 

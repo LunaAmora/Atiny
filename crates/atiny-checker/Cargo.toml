@@ -1,0 +1,13 @@
+[package]
+name = "atiny-checker"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+atiny-location = {path = "../atiny-location" }
+atiny-tree = {path = "../atiny-tree" }
+atiny-error = {path = "../atiny-error" }
+im-rc = "15.1.0"
+itertools = "0.10.5"
