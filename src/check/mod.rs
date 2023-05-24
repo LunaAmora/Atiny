@@ -167,7 +167,8 @@ impl<'a> Infer<'a, '_> for Expr {
             }
 
             Let(x, e0, e1) => {
-                let t = e0.infer(ctx.level_up())?;
+                let ctx = ctx.level_up();
+                let t = e0.infer(ctx.clone())?;
                 let t_generalized = t.generalize(ctx.clone());
 
                 let new_ctx = ctx.extend(x, t_generalized);
@@ -182,7 +183,7 @@ impl<'a> Infer<'a, '_> for Expr {
                 for c in clauses {
                     let mut set = HashSet::new();
                     let (clause_pat, new_ctx) = c.pat.infer((ctx.clone(), &mut set))?;
-                    unify(ctx.clone(), pat_ty.clone(), clause_pat)?;
+                    unify(new_ctx.clone(), pat_ty.clone(), clause_pat)?;
                     unify(new_ctx.clone(), ret_ty.clone(), c.expr.infer(new_ctx)?)?;
                 }
 
