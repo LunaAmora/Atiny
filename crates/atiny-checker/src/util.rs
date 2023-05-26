@@ -1,4 +1,4 @@
-use std::ops::{ControlFlow, FromResidual, Try};
+use std::fmt::Display;
 
 pub fn format_radix(mut x: usize, radix: usize) -> String {
     let mut result = vec![];
@@ -13,30 +13,11 @@ pub fn format_radix(mut x: usize, radix: usize) -> String {
     format!("'{}", result.into_iter().rev().collect::<String>())
 }
 
-pub enum UnifyResult {
-    Ok,
-    CantUnify,
-    Cyclic,
-}
+#[derive(Debug)]
+pub struct OccursCheck;
 
-impl Try for UnifyResult {
-    type Output = Self;
-    type Residual = Self;
-
-    fn from_output(output: Self::Output) -> Self {
-        output
-    }
-
-    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
-        match self {
-            Self::Ok => ControlFlow::Continue(self),
-            _ => ControlFlow::Break(Self::Cyclic),
-        }
-    }
-}
-
-impl FromResidual for UnifyResult {
-    fn from_residual(residual: <Self as Try>::Residual) -> Self {
-        residual
+impl Display for OccursCheck {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "found cyclic type of infinite size")
     }
 }
