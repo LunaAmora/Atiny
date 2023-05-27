@@ -13,7 +13,7 @@ pub mod context;
 pub mod types;
 pub mod util;
 
-pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error<'_>> {
+pub fn unify(ctx: Ctx, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error> {
     if Rc::ptr_eq(&left, &right) {
         return Ok(());
     }
@@ -43,12 +43,7 @@ pub fn unify(ctx: Ctx<'_>, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<()
     }
 }
 
-fn unify_hole<'a>(
-    ctx: Ctx<'a>,
-    hole: &Ref,
-    other: Rc<MonoType>,
-    swap: bool,
-) -> Result<(), Error<'a>> {
+fn unify_hole(ctx: Ctx, hole: &Ref, other: Rc<MonoType>, swap: bool) -> Result<(), Error> {
     match hole.get() {
         Hole::Empty(lvl) => match occur_check(hole, lvl, other.clone()) {
             Err(occurs_check) => ctx.error(occurs_check.to_string()),
@@ -94,15 +89,15 @@ fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), Occurs
     Ok(())
 }
 
-pub trait Infer<'a, 'b> {
+pub trait Infer<'a> {
     type Return;
     type Context;
     fn infer(self, ctx: Self::Context) -> Self::Return;
 }
 
-impl<'a> Infer<'a, '_> for Expr {
-    type Return = Result<Rc<MonoType>, Error<'a>>;
-    type Context = Ctx<'a>;
+impl Infer<'_> for Expr {
+    type Return = Result<Rc<MonoType>, Error>;
+    type Context = Ctx;
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
         use AtomKind::*;
@@ -151,7 +146,7 @@ impl<'a> Infer<'a, '_> for Expr {
 
             Let(x, e0, e1) => {
                 let lvl_ctx = ctx.level_up();
-                let t = e0.infer(lvl_ctx.clone())?;
+                let t = e0.infer(lvl_ctx)?;
                 let t_generalized = t.generalize(ctx.clone());
 
                 let new_ctx = ctx.extend(x, t_generalized);
@@ -185,9 +180,9 @@ impl<'a> Infer<'a, '_> for Expr {
     }
 }
 
-impl<'a, 'b> Infer<'a, 'b> for Pattern {
-    type Return = Result<(Rc<MonoType>, Ctx<'b>), Error<'b>>;
-    type Context = (Ctx<'b>, &'a mut HashSet<String>);
+impl<'a> Infer<'a> for Pattern {
+    type Return = Result<(Rc<MonoType>, Ctx), Error>;
+    type Context = (Ctx, &'a mut HashSet<String>);
 
     fn infer(self, (ctx, set): Self::Context) -> Self::Return {
         use AtomKind::*;
@@ -218,7 +213,7 @@ impl<'a, 'b> Infer<'a, 'b> for Pattern {
 
                 Tuple(vec) => {
                     let mut res = Vec::new();
-                    let mut last_ctx = ctx.clone();
+                    let mut last_ctx = ctx;
 
                     for e in vec {
                         let (i, c) = e.infer((last_ctx, set))?;
@@ -233,9 +228,9 @@ impl<'a, 'b> Infer<'a, 'b> for Pattern {
     }
 }
 
-impl<'a> Infer<'a, '_> for Type {
-    type Return = Result<Rc<MonoType>, Error<'a>>;
-    type Context = Ctx<'a>;
+impl Infer<'_> for Type {
+    type Return = Result<Rc<MonoType>, Error>;
+    type Context = Ctx;
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
         let ctx = ctx.set_position(self.location);

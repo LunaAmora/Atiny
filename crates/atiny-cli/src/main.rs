@@ -15,7 +15,7 @@ fn main() {
         }
     ";
 
-    let ctx = Ctx::new(code);
+    let ctx = Ctx::default();
     let ctx = ctx.extend(
         "add".to_string(),
         MonoType::arrow(
@@ -38,10 +38,10 @@ fn main() {
 
     let result_type = ExprParser::new()
         .parse(code)
-        .map_err(|x| from_lalrpop(x, code))
+        .map_err(from_lalrpop)
         .and_then(|parsed| parsed.infer(ctx))
         .unwrap_or_else(|err| {
-            eprintln!("{}", err);
+            eprintln!("{}", err.with_code(code));
             exit(1)
         });
 

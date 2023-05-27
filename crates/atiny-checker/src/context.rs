@@ -9,27 +9,27 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Ctx<'a> {
+pub struct Ctx {
     counter: Rc<RefCell<usize>>,
     pub map: im_rc::HashMap<String, Rc<TypeScheme>>,
     pub typ_map: im_rc::HashSet<String>,
-    pub code: &'a str,
     pub location: ByteRange,
     pub level: usize,
 }
 
-impl<'a> Ctx<'a> {
-    pub fn new(code: &'a str) -> Self {
+impl Default for Ctx {
+    fn default() -> Self {
         Self {
             counter: Rc::new(RefCell::new(0)),
             map: Default::default(),
             typ_map: Default::default(),
-            code,
             location: Default::default(),
             level: 0,
         }
     }
+}
 
+impl Ctx {
     pub fn extend(&self, name: String, typ: Rc<TypeScheme>) -> Self {
         Self {
             map: self.map.update(name, typ),
@@ -73,8 +73,8 @@ impl<'a> Ctx<'a> {
         self.map.get(name).cloned()
     }
 
-    pub fn error<T>(&self, msg: String) -> Result<T, Error<'a>> {
-        Err(Error::new(msg, self.location.locate(self.code), self.code))
+    pub fn error<T>(&self, msg: String) -> Result<T, Error> {
+        Err(Error::new(msg, self.location))
     }
 
     pub fn new_hole(&self) -> Rc<MonoType> {
