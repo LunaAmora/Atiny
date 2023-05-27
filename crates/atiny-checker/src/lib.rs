@@ -201,14 +201,9 @@ impl<'a> Infer<'a> for Pattern {
                         return ctx.error(format!("identifier '{}' bound more than once", x));
                     }
 
-                    match ctx.lookup(&x) {
-                        Some(sigma) => Ok((sigma.instantiate(ctx.clone()), ctx)),
-                        None => {
-                            let t = ctx.new_hole();
-                            let new_ctx = ctx.extend(x, t.to_poly());
-                            Ok((t, new_ctx))
-                        }
-                    }
+                    let t = ctx.new_hole();
+                    let new_ctx = ctx.extend(x, t.to_poly());
+                    Ok((t, new_ctx))
                 }
 
                 Tuple(vec) => {
