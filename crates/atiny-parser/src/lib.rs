@@ -3,7 +3,6 @@
 
 #![warn(clippy::semicolon_if_nothing_returned)]
 #![warn(clippy::use_self)]
-#![feature(try_trait_v2)]
 
 pub mod error;
 

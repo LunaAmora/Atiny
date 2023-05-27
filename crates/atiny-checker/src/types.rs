@@ -127,7 +127,7 @@ impl Ref {
         self.0.borrow().data.clone()
     }
 
-    pub fn get_item(&self) -> RefMut<RefItem> {
+    pub fn get_item_mut(&self) -> RefMut<RefItem> {
         self.0.as_ref().borrow_mut()
     }
 }
