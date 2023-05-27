@@ -36,6 +36,10 @@ impl ByteRange {
     pub fn locate(&self, code: &str) -> Range {
         Range(self.0.locate(code), self.1.locate(code))
     }
+
+    pub fn singleton(byte: usize) -> Self {
+        Self(Byte(byte), Byte(byte))
+    }
 }
 
 /// Line and column position inside a source file.
