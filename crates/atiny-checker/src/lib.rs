@@ -89,13 +89,13 @@ fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), Occurs
     Ok(())
 }
 
-pub trait Infer<'a, 'b> {
+pub trait Infer<'a> {
     type Return;
     type Context;
     fn infer(self, ctx: Self::Context) -> Self::Return;
 }
 
-impl<'a> Infer<'a, '_> for Expr {
+impl Infer<'_> for Expr {
     type Return = Result<Rc<MonoType>, Error>;
     type Context = Ctx;
 
@@ -180,7 +180,7 @@ impl<'a> Infer<'a, '_> for Expr {
     }
 }
 
-impl<'a, 'b> Infer<'a, 'b> for Pattern {
+impl<'a> Infer<'a> for Pattern {
     type Return = Result<(Rc<MonoType>, Ctx), Error>;
     type Context = (Ctx, &'a mut HashSet<String>);
 
@@ -228,7 +228,7 @@ impl<'a, 'b> Infer<'a, 'b> for Pattern {
     }
 }
 
-impl<'a> Infer<'a, '_> for Type {
+impl Infer<'_> for Type {
     type Return = Result<Rc<MonoType>, Error>;
     type Context = Ctx;
 
