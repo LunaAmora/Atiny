@@ -9,8 +9,8 @@ Loc<T>: Located<T> = {
     <s: @L> <data: T> <e: @R> => Located { data, location: ByteRange(Byte(s), Byte(e)) }
 }
 
-Comma<T>: Vec<T> = {
-    <mut v:(<T> ",")*> <e:T?> => match e {
+Sep<U, T>: Vec<T> = {
+    <mut v:(<T> U)*> <e:T?> => match e {
         Some(e) => {
             v.push(e);
             v
@@ -19,6 +19,8 @@ Comma<T>: Vec<T> = {
     }
 };
 
+
+
 // For expressions
 
 AtomItem<T>: AtomKind<T> = {
@@ -26,7 +28,7 @@ AtomItem<T>: AtomKind<T> = {
     "true"             => AtomKind::Boolean(true),
     "false"            => AtomKind::Boolean(false),
     <id: Id>           => AtomKind::Identifier(id),
-    "(" <vec:Comma<T>> ")" => {
+    "(" <vec:Sep<",", T>> ")" => {
         match vec.len() {
             0 => AtomKind::Unit,
             _ => AtomKind::Tuple(vec),
@@ -67,19 +69,19 @@ Clause: Clause = {
     <pat:AtomPat> "=>" <e:Expr> => Clause::new(pat, e)
 }
 
-Clauses = Comma<Clause>;
+Clauses = Sep<",", Clause>;
 
 PatternItem : PatternKind = {
     <pat:AtomPat> => pat.data
 }
 
-pub Pattern : Pattern = Loc<PatternItem>;
+Pattern : Pattern = Loc<PatternItem>;
 
 // For Types
 
 TypeAtomItem : TypeKind = {
     <id: Id>                    => TypeKind::Variable(VariableNode { name: id }),
-    "(" <types:Comma<Type>> ")" => {
+    "(" <types:Sep<",", Type>> ")" => {
         match types.len() {
             0 => TypeKind::Unit,
             _ => TypeKind::Tuple(TypeTupleNode { types }),
@@ -109,6 +111,44 @@ TypeKind : TypeKind = {
 }
 
 Type : Type = Loc<TypeKind>;
+
+// Top level
+
+Constructor : Constructor = {
+    "|" <name: Id> <types: TypeAtom*> => Constructor { name, types } 
+}
+
+TypeDecl : TypeDecl = {
+    "type" <name: Id> <params: Id*> "=" <constructors: Constructor*> => TypeDecl {
+        name,
+        params,
+        constructors
+    }
+}
+
+Param : (String, Type) = {
+    "(" <name: Id> ":" <typ: Type> ")" => (name, typ)
+}
+
+FnDecl : FnDecl = {
+    "fn" <name: Id> <params: Param*> ":" <r#return: Type> "{" <body: Expr> "}" => FnDecl {
+        name,
+        params,
+        r#return: Box::new(r#return),
+        body
+    }
+} 
+
+TopLevelKind : TopLevelKind = {
+    <FnDecl> => TopLevelKind::FnDecl(<>), 
+    <TypeDecl> => TopLevelKind::TypeDecl(<>), 
+}
+
+TopLevel : TopLevel = Loc<TopLevelKind>;
+
+pub Program : Vec<TopLevel> = {
+    <TopLevel*> => <>
+}
 
 Num: u64 = <s:r"[0-9]+">                   => u64::from_str(s).unwrap();
 Id: String = <s:r"[a-zA-Z_][a-zA-Z0-9_]*"> => s.to_string();
