@@ -199,25 +199,71 @@ pub struct Constructor {
     pub types: Vec<Type>,
 }
 
-#[derive(Debug)]
-pub struct TypeDecl {
-    pub name: String,
-    pub types: Vec<String>,
-    pub constructors: Vec<Constructor>,
+impl Display for Constructor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "| {} {}",
+            self.name,
+            self.types.iter().map(|x| format!("({})", x)).join(" ")
+        )
+    }
 }
 
 #[derive(Debug)]
-pub struct LetDecl {
+pub struct TypeDecl {
     pub name: String,
-    pub expr: Box<Expr>,
+    pub params: Vec<String>,
+    pub constructors: Vec<Constructor>,
+}
+
+impl Display for TypeDecl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let params = self.params.iter().map(|x| format!(" {x}")).join("");
+        let constructors = self.constructors.iter().join("");
+        write!(f, "(type {}{} = {})", self.name, params, constructors)
+    }
+}
+
+#[derive(Debug)]
+pub struct FnDecl {
+    pub name: String,
+    pub params: Vec<(String, Type)>,
+    pub r#return: Box<Type>,
+    pub body: Expr,
+}
+
+impl Display for FnDecl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let params = self
+            .params
+            .iter()
+            .map(|(n, t)| format!("({} : {})", n, t))
+            .join(" ");
+
+        write!(
+            f,
+            "(fn {} {} : {} {{{}}})",
+            self.name, params, self.r#return, self.body
+        )
+    }
 }
 
 #[derive(Debug)]
 pub enum TopLevelKind {
     TypeDecl(TypeDecl),
-    LetDecl(LetDecl),
+    FnDecl(FnDecl),
 }
 
 /// It's a declaration on the top level of the program. It can be a function definition, a type
 /// definition, a trait definition, record definition and etc.
 pub type TopLevel = Located<TopLevelKind>;
+
+impl Display for TopLevelKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TopLevelKind::TypeDecl(td) => write!(f, "{}", td),
+            TopLevelKind::FnDecl(fd) => write!(f, "{}", fd),
+        }
+    }
+}
