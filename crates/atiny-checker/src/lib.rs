@@ -90,19 +90,17 @@ fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), Occurs
 }
 
 pub trait Infer<'a> {
-    type Return;
     type Context;
-    fn infer(self, ctx: Self::Context) -> Self::Return;
+    fn infer(self, ctx: Self::Context) -> Result<Rc<MonoType>, Error>;
 }
 
 impl Infer<'_> for Expr {
-    type Return = Result<Rc<MonoType>, Error>;
     type Context = Ctx;
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, mut ctx: Self::Context) -> Result<Rc<MonoType>, Error> {
         use AtomKind::*;
         use ExprKind::*;
-        let ctx = ctx.set_position(self.location);
+        ctx = ctx.set_position(self.location);
 
         match self.data {
             Atom(a) => match a {
@@ -112,12 +110,11 @@ impl Infer<'_> for Expr {
 
                 Boolean(_) => Ok(MonoType::var("Bool".to_string())),
 
-                Tuple(vec) => Ok(MonoType::Tuple(
-                    vec.into_iter()
-                        .map(|e| e.infer(ctx.clone()))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )
-                .into()),
+                Tuple(vec) => vec
+                    .into_iter()
+                    .map(|expr| expr.infer(ctx.clone()))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|vec| Rc::new(MonoType::Tuple(vec))),
 
                 Identifier(x) => match ctx.lookup(&x) {
                     Some(sigma) => Ok(sigma.instantiate(ctx)),
@@ -160,9 +157,9 @@ impl Infer<'_> for Expr {
 
                 for c in clauses {
                     let mut set = HashSet::new();
-                    let (clause_pat, new_ctx) = c.pat.infer((ctx.clone(), &mut set))?;
-                    unify(new_ctx.clone(), pat_ty.clone(), clause_pat)?;
-                    unify(new_ctx.clone(), ret_ty.clone(), c.expr.infer(new_ctx)?)?;
+                    let clause_pat = c.pat.infer((&mut ctx, &mut set))?;
+                    unify(ctx.clone(), pat_ty.clone(), clause_pat)?;
+                    unify(ctx.clone(), ret_ty.clone(), c.expr.infer(ctx.clone())?)?;
                 }
 
                 Ok(ret_ty)
@@ -181,53 +178,44 @@ impl Infer<'_> for Expr {
 }
 
 impl<'a> Infer<'a> for Pattern {
-    type Return = Result<(Rc<MonoType>, Ctx), Error>;
-    type Context = (Ctx, &'a mut HashSet<String>);
+    type Context = (&'a mut Ctx, &'a mut HashSet<String>);
 
-    fn infer(self, (ctx, set): Self::Context) -> Self::Return {
+    fn infer(self, (mut ctx, set): Self::Context) -> Result<Rc<MonoType>, Error> {
         use AtomKind::*;
-        let ctx = ctx.set_position(self.location);
+        *ctx = ctx.set_position(self.location);
 
         match self.data {
             PatternKind::Atom(a) => match a {
-                Unit => Ok((MonoType::var("()".to_string()), ctx)),
+                Unit => Ok(MonoType::var("()".to_string())),
 
-                Number(_) => Ok((MonoType::var("Int".to_string()), ctx)),
+                Number(_) => Ok(MonoType::var("Int".to_string())),
 
-                Boolean(_) => Ok((MonoType::var("Bool".to_string()), ctx)),
+                Boolean(_) => Ok(MonoType::var("Bool".to_string())),
 
                 Identifier(x) => {
                     if !set.insert(x.to_owned()) {
                         return ctx.error(format!("identifier '{}' bound more than once", x));
                     }
 
-                    let t = ctx.new_hole();
-                    let new_ctx = ctx.extend(x, t.to_poly());
-                    Ok((t, new_ctx))
+                    let hole = ctx.new_hole();
+                    *ctx = ctx.extend(x, hole.to_poly());
+                    Ok(hole)
                 }
 
-                Tuple(vec) => {
-                    let mut res = Vec::new();
-                    let mut last_ctx = ctx;
-
-                    for e in vec {
-                        let (i, c) = e.infer((last_ctx, set))?;
-                        last_ctx = c;
-                        res.push(i);
-                    }
-
-                    Ok((MonoType::Tuple(res).into(), last_ctx))
-                }
+                Tuple(vec) => vec
+                    .into_iter()
+                    .map(|pat| pat.infer((&mut ctx, set)))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(|vec| Rc::new(MonoType::Tuple(vec))),
             },
         }
     }
 }
 
 impl Infer<'_> for Type {
-    type Return = Result<Rc<MonoType>, Error>;
     type Context = Ctx;
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, ctx: Self::Context) -> Result<Rc<MonoType>, Error> {
         let ctx = ctx.set_position(self.location);
 
         match self.data {
@@ -245,25 +233,21 @@ impl Infer<'_> for Type {
                 }
             }
 
-            TypeKind::Tuple(tuple) => {
-                let mut typ = Vec::new();
-                for el in tuple.types {
-                    typ.push(el.infer(ctx.clone())?);
-                }
-                Ok(MonoType::Tuple(typ).into())
-            }
+            TypeKind::Tuple(tuple) => tuple
+                .types
+                .into_iter()
+                .map(|typ| typ.infer(ctx.clone()))
+                .collect::<Result<Vec<_>, _>>()
+                .map(|vec| Rc::new(MonoType::Tuple(vec))),
 
-            TypeKind::Forall(forall) => {
-                let new_ctx = ctx.extend_types(&forall.args);
-                let mono = forall.body.infer(new_ctx)?;
-
-                let forall = TypeScheme {
+            TypeKind::Forall(forall) => forall
+                .body
+                .infer(ctx.extend_types(&forall.args))
+                .map(|mono| TypeScheme {
                     names: forall.args,
                     mono,
-                };
-
-                Ok(forall.instantiate(ctx))
-            }
+                })
+                .map(|forall| forall.instantiate(ctx)),
 
             TypeKind::Application(_) => todo!(),
 
