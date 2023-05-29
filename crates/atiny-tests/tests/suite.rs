@@ -8,7 +8,7 @@ use atiny_parser::{error::from_lalrpop, ExprParser};
 #[macro_use]
 extern crate atiny_tests;
 
-pub fn default_context() -> Ctx<'a> {
+pub fn default_context() -> Ctx {
     Ctx::default()
         .extend(
             "add".to_string(),
