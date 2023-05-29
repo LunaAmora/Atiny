@@ -31,7 +31,7 @@ pub fn default_context() -> Ctx {
         )
 }
 
-mk_test! { "/home/sofia/Projects/atiny/crates/atiny-tests/suite", |code| {
+mk_test! { concat!(env!("CARGO_MANIFEST_DIR"), "/suite/"), |code| {
     ExprParser::new()
         .parse(&code)
         .map_err(from_lalrpop)
