@@ -15,5 +15,4 @@ atiny-checker = {path = "../atiny-checker" }
 
 proc-macro2 = "1.0.59"
 quote = "1.0.28"
-rustc-test = "0.3.1"
 syn = "2.0.18"

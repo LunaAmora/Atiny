@@ -1,4 +1,7 @@
-use std::fs::{self, DirEntry};
+#![feature(test)]
+extern crate test;
+use std::fs::{self, read_to_string, DirEntry};
+use test::{TestDesc, TestDescAndFn, TestName};
 
 pub struct Test {
     pub directory: &'static str,
@@ -15,33 +18,27 @@ pub fn split_name(file: &DirEntry) -> (String, String) {
 }
 
 pub fn test_runner(tests: &[&Test]) {
-    use std::panic;
-
-    use rustc_test::{TestDesc, TestDescAndFn, TestName};
-
     let args = std::env::args().collect::<Vec<_>>();
-    let parsed = rustc_test::test::parse_opts(&args);
+    let parsed = test::test::parse_opts(&args);
 
-    let mut opts = match parsed {
+    let opts = match parsed {
         Some(Ok(o)) => o,
         Some(Err(msg)) => panic!("{:?}", msg),
         None => return,
     };
 
-    opts.verbose = false;
-
-    let mut rendered: Vec<TestDescAndFn> = Vec::new();
+    let mut rendered = Vec::new();
 
     for test in tests {
         let function = test.run;
-        let directory = fs::read_dir(test.directory).unwrap();
+        let directory = std::fs::read_dir(test.directory).unwrap();
 
         for file in directory {
             if let Ok(file) = file {
                 let (file_name, typ) = split_name(&file);
 
                 if typ != "at" {
-                    break;
+                    continue;
                 }
 
                 if file.file_type().unwrap().is_file() {
@@ -49,13 +46,21 @@ pub fn test_runner(tests: &[&Test]) {
                         desc: TestDesc {
                             name: TestName::DynTestName(file_name.clone()),
                             ignore: false,
-                            should_panic: rustc_test::ShouldPanic::No,
-                            allow_fail: true,
+                            should_panic: test::ShouldPanic::No,
+                            ignore_message: None,
+                            source_file: "",
+                            start_line: 0,
+                            start_col: 0,
+                            end_line: 0,
+                            end_col: 0,
+                            compile_fail: false,
+                            no_run: false,
+                            test_type: test::TestType::IntegrationTest,
                         },
-                        testfn: rustc_test::TestFn::DynTestFn(Box::new(move || {
+                        testfn: test::TestFn::DynTestFn(Box::new(move || {
                             println!("testing '{}'", file_name);
 
-                            let content = fs::read_to_string(file.path()).unwrap();
+                            let content = read_to_string(file.path()).unwrap();
 
                             let mut path = file.path();
                             path.pop();
@@ -64,10 +69,14 @@ pub fn test_runner(tests: &[&Test]) {
 
                             let result = function(content);
 
-                            if let Ok(expects) = fs::read_to_string(path.clone()) {
-                                assert_eq!(expects, result)
+                            if let Ok(expects) = read_to_string(path.clone()) {
+                                if expects.eq(&result) {
+                                    Ok(())
+                                } else {
+                                    Err("Mismatch".to_string())
+                                }
                             } else {
-                                fs::write(path, result).unwrap();
+                                fs::write(path, result).map_err(|err| err.to_string())
                             }
                         })),
                     })
@@ -78,7 +87,7 @@ pub fn test_runner(tests: &[&Test]) {
         }
     }
 
-    match rustc_test::run_tests_console(&opts, rendered) {
+    match test::run_tests_console(&opts, rendered) {
         Ok(true) => {
             println!();
         }
