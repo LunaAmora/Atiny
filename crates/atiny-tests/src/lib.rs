@@ -101,7 +101,7 @@ macro_rules! mk_test {
     ($directory:expr, $code:expr) => {
         #[test_case]
         const TEST: atiny_tests::Test = atiny_tests::Test {
-            directory: $directory,
+            directory: concat!(env!("CARGO_MANIFEST_DIR"), $directory),
             run: $code,
         };
     };
