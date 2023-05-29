@@ -1,0 +1,19 @@
+[package]
+name = "atiny-tests"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+atiny-location = {path = "../atiny-location" }
+atiny-tree = {path = "../atiny-tree" }
+atiny-error = {path = "../atiny-error" }
+atiny-parser = {path = "../atiny-parser" }
+atiny-checker = {path = "../atiny-checker" }
+
+proc-macro2 = "1.0.59"
+quote = "1.0.28"
+rustc-test = "0.3.1"
+syn = "2.0.18"

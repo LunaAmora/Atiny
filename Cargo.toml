@@ -7,4 +7,5 @@ members = [
     "crates/atiny-error",
     "crates/atiny-tree",
     "crates/atiny-location",
+    "crates/atiny-tests",
 ]
