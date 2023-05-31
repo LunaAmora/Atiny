@@ -1,6 +1,6 @@
 use std::{
     cell::{RefCell, RefMut},
-    collections::HashMap,
+    collections::{HashMap, BTreeMap},
     fmt::{self, Display},
     hash::{Hash, Hasher},
     ptr::addr_of,
@@ -92,6 +92,18 @@ impl Display for Ref {
 }
 
 impl Eq for Ref {}
+
+impl Ord for Ref {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.identifier().cmp(&other.identifier())
+    }
+}
+
+impl PartialOrd for Ref {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.identifier().partial_cmp(&other.identifier())
+    }
+}
 
 impl Hash for Ref {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -198,7 +210,7 @@ impl MonoType {
         Rc::new(Self::Hole(Ref::new(name, level)))
     }
 
-    pub fn generalize_type(&self, ctx: Ctx, holes: &mut HashMap<Ref, String>) -> Rc<Self> {
+    pub fn generalize_type(&self, ctx: Ctx, holes: &mut BTreeMap<Ref, String>) -> Rc<Self> {
         match self {
             Self::Var(_) => Rc::new(self.clone()),
 
