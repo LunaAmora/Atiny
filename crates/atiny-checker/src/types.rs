@@ -224,7 +224,7 @@ impl MonoType {
         Rc::new(Self::Hole(Ref::new(name, level)))
     }
 
-    fn generalize_type(&self, ctx: Ctx, holes: &mut HashMap<Ref, String>) -> Rc<Self> {
+    fn generalize_type(&self, ctx: Ctx, holes: &mut BTreeMap<Ref, String>) -> Rc<Self> {
         match self {
             Self::Var(_) => Rc::new(self.clone()),
 
