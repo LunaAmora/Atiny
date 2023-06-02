@@ -73,6 +73,7 @@ pub fn test_runner(tests: &[&Test]) {
                                 if expects.eq(&result) {
                                     Ok(())
                                 } else {
+                                    println!("Expected:\n\n{}\n\ngot:\n\n{}", expects, result);
                                     Err("Mismatch".to_string())
                                 }
                             } else {
