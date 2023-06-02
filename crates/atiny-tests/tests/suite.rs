@@ -3,7 +3,7 @@
 
 use atiny_checker::Infer;
 use atiny_checker::{context::Ctx, types::MonoType};
-use atiny_parser::{error::from_lalrpop, ExprParser};
+use atiny_parser::{error::from_lalrpop, ExprParser, ProgramParser};
 
 #[macro_use]
 extern crate atiny_tests;
@@ -37,5 +37,15 @@ mk_test! { "/suite/", |code| {
         .map_err(from_lalrpop)
         .and_then(|parsed| parsed.infer( default_context()))
         .map(|x| x.to_string())
+        .unwrap_or_else(|err| err.with_code(&code).to_string())
+} }
+
+mk_test! { "/suite/parsing/", |code| {
+    use itertools::Itertools;
+
+    ProgramParser::new()
+        .parse(&code)
+        .map_err(from_lalrpop)
+        .map(|x| x.iter().map(|x| x.to_string()).join("\n"))
         .unwrap_or_else(|err| err.with_code(&code).to_string())
 } }
