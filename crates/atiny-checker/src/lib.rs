@@ -1,3 +1,6 @@
+//! This module is useful for type checking [Expr] and [TopLevel] definitions using the
+//! hindley-milner type system extended with type classes and linear types.
+
 use std::{collections::HashSet, rc::Rc};
 
 use atiny_error::Error;
@@ -5,93 +8,45 @@ use atiny_tree::r#abstract::*;
 
 use self::{
     context::Ctx,
-    types::{Hole, MonoType, Ref, TypeScheme},
-    util::OccursCheck,
+    types::{MonoType, TypeScheme},
 };
 
 pub mod context;
 pub mod types;
-pub mod util;
+pub mod unify;
 
-pub fn unify(ctx: Ctx, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error> {
-    if Rc::ptr_eq(&left, &right) {
-        return Ok(());
-    }
+type Result<T, U = Error> = std::result::Result<T, U>;
 
-    match (&*left, &*right) {
-        (MonoType::Var(x), MonoType::Var(y)) if x == y => Ok(()),
-
-        (MonoType::Arrow(l, r), MonoType::Arrow(l1, r1)) => {
-            unify(ctx.clone(), l.clone(), l1.clone())?;
-            unify(ctx, r.clone(), r1.clone())
-        }
-
-        (MonoType::Hole(l), MonoType::Hole(r)) if l == r => Ok(()),
-
-        (MonoType::Hole(hole), _) => unify_hole(ctx, hole, right, false),
-
-        (_, MonoType::Hole(hole)) => unify_hole(ctx, hole, left, true),
-
-        (MonoType::Tuple(vec_l), MonoType::Tuple(vec_r)) if vec_l.len() == vec_r.len() => {
-            for (l, r) in vec_l.iter().zip(vec_r.iter()) {
-                unify(ctx.clone(), l.clone(), r.clone())?;
-            }
-            Ok(())
-        }
-
-        (l, r) => ctx.error(format!("type mismatch between '{}' and '{}'", l, r)),
-    }
-}
-
-fn unify_hole(ctx: Ctx, hole: &Ref, other: Rc<MonoType>, swap: bool) -> Result<(), Error> {
-    match hole.get() {
-        Hole::Empty(lvl) => match occur_check(hole, lvl, other.clone()) {
-            Err(occurs_check) => ctx.error(occurs_check.to_string()),
-            Ok(_) => {
-                hole.fill(other);
-                Ok(())
-            }
-        },
-        Hole::Filled(filled) if swap => unify(ctx, other, filled),
-        Hole::Filled(filled) => unify(ctx, filled, other),
-    }
-}
-
-fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), OccursCheck> {
-    match &*other {
-        MonoType::Hole(other_hole) if hole == other_hole => return Err(OccursCheck),
-
-        MonoType::Hole(other_hole) => match other_hole.get() {
-            Hole::Empty(lvl2) => {
-                let min_level = usize::min(lvl, lvl2);
-                other_hole.get_item_mut().data = Hole::Empty(min_level);
-            }
-
-            Hole::Filled(filled) => {
-                occur_check(hole, lvl, filled)?;
-            }
-        },
-
-        MonoType::Tuple(vec) => {
-            for mono in vec.clone() {
-                occur_check(hole, lvl, mono)?;
-            }
-        }
-
-        MonoType::Arrow(l, r) => {
-            occur_check(hole, lvl, l.clone())?;
-            occur_check(hole, lvl, r.clone())?;
-        }
-
-        MonoType::Var(_) => {}
-    }
-
-    Ok(())
-}
-
+/// This trait exposes a function called [Infer::infer] that tries to discover a type for an
+/// expression. A type rule that express this is:
+///
+/// ```md
+///    'a = new_hole     G, x: 'a |- e => b'
+/// ----------------------------------------
+///         G |- |x| e => a' -> b'
+/// ```
+///
 pub trait Infer<'a> {
     type Context;
+
+    /// Infers the type of an expression.
     fn infer(self, ctx: Self::Context) -> Result<Rc<MonoType>, Error>;
+}
+
+/// This trait exposes a function called [Check::check] that tries to check an expression against a
+/// known type only producing some side effects. An example of this type rule is
+///
+/// ```md
+///       G, x: 'a |- e <== b'
+/// -------------------------------
+///     G |- |x| e <== a' -> b'
+/// ```
+///
+pub trait Check<'a> {
+    type Context;
+
+    /// Checks an expression against a known type.
+    fn check(self, ctx: Self::Context, typ: Rc<MonoType>) -> Result<(), Error>;
 }
 
 impl Infer<'_> for Expr {
@@ -120,6 +75,7 @@ impl Infer<'_> for Expr {
                     Some(sigma) => Ok(sigma.instantiate(ctx)),
                     None => ctx.error(format!("unbound variable '{}'", x)),
                 },
+                Group(expr) => expr.infer(ctx),
             },
 
             Application(e0, e1) => {
@@ -129,7 +85,7 @@ impl Infer<'_> for Expr {
                 let t_return = ctx.new_hole();
                 let function_type = MonoType::arrow(t1, t_return.clone());
 
-                unify(ctx, t0, function_type)?;
+                unify::unify(ctx, t0, function_type)?;
 
                 Ok(t_return)
             }
@@ -158,8 +114,8 @@ impl Infer<'_> for Expr {
                 for c in clauses {
                     let mut set = HashSet::new();
                     let clause_pat = c.pat.infer((&mut ctx, &mut set))?;
-                    unify(ctx.clone(), pat_ty.clone(), clause_pat)?;
-                    unify(ctx.clone(), ret_ty.clone(), c.expr.infer(ctx.clone())?)?;
+                    unify::unify(ctx.clone(), pat_ty.clone(), clause_pat)?;
+                    unify::unify(ctx.clone(), ret_ty.clone(), c.expr.infer(ctx.clone())?)?;
                 }
 
                 Ok(ret_ty)
@@ -169,7 +125,7 @@ impl Infer<'_> for Expr {
                 let typ_res = typ.infer(ctx.clone())?;
                 let expr_res = expr.infer(ctx.clone())?;
 
-                unify(ctx, expr_res, typ_res.clone())?;
+                unify::unify(ctx, expr_res, typ_res.clone())?;
 
                 Ok(typ_res)
             }
@@ -207,6 +163,7 @@ impl<'a> Infer<'a> for Pattern {
                     .map(|pat| pat.infer((&mut ctx, set)))
                     .collect::<Result<Vec<_>, _>>()
                     .map(|vec| Rc::new(MonoType::Tuple(vec))),
+                Group(expr) => expr.infer((ctx, set)),
             },
         }
     }

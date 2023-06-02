@@ -23,21 +23,36 @@ Sep<U, T>: Vec<T> = {
 
 // For expressions
 
-AtomItem<T>: AtomKind<T> = {
+PatAtomItem: AtomKind<Pattern> = {
     <n:Num>            => AtomKind::Number(n),
     "true"             => AtomKind::Boolean(true),
     "false"            => AtomKind::Boolean(false),
     <id: Id>           => AtomKind::Identifier(id),
-    "(" <vec:Sep<",", T>> ")" => {
+    "(" <mut vec:Sep<",", Pattern>> ")" => {
         match vec.len() {
             0 => AtomKind::Unit,
+            1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
+            _ => AtomKind::Tuple(vec),
+        }
+    },
+}
+
+ExprAtomItem: AtomKind<Expr> = {
+    <n:Num>            => AtomKind::Number(n),
+    "true"             => AtomKind::Boolean(true),
+    "false"            => AtomKind::Boolean(false),
+    <id: Id>           => AtomKind::Identifier(id),
+    "(" <mut vec:Sep<",", Expr>> ")" => {
+        match vec.len() {
+            0 => AtomKind::Unit,
+            1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
             _ => AtomKind::Tuple(vec),
         }
     },
 }
 
 AtomExpr: Expr = {
-    <a: Loc<AtomItem<Expr>>> => a.map(|a| ExprKind::Atom(a))
+    <a: Loc<ExprAtomItem>> => a.map(|a| ExprKind::Atom(a))
 };
 
 CallItem: ExprKind = {
@@ -62,7 +77,7 @@ ExprItem: ExprKind = {
 pub Expr : Expr = Loc<ExprItem>;
 
 AtomPat: Pattern = {
-    <a: Loc<AtomItem<Pattern>>> => a.map(|a| PatternKind::Atom(a))
+    <a: Loc<PatAtomItem>> => a.map(|a| PatternKind::Atom(a))
 };
 
 Clause: Clause = {
@@ -81,9 +96,10 @@ Pattern : Pattern = Loc<PatternItem>;
 
 TypeAtomItem : TypeKind = {
     <id: Id>                    => TypeKind::Variable(VariableNode { name: id }),
-    "(" <types:Sep<",", Type>> ")" => {
+    "(" <mut types:Sep<",", Type>> ")" => {
         match types.len() {
             0 => TypeKind::Unit,
+            1 => types.pop().unwrap().data,
             _ => TypeKind::Tuple(TypeTupleNode { types }),
         }
     },

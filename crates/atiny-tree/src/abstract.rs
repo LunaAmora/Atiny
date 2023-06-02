@@ -7,6 +7,7 @@ use std::fmt::{self, Display};
 use atiny_location::Located;
 use itertools::Itertools;
 
+/// Primary expressions that are used both for [Pattern] and [Expr].
 #[derive(Debug)]
 pub enum AtomKind<T> {
     Unit,
@@ -14,6 +15,7 @@ pub enum AtomKind<T> {
     Boolean(bool),
     Tuple(Vec<T>),
     Identifier(String),
+    Group(Box<T>),
 }
 
 impl<T: Display> Display for AtomKind<T> {
@@ -24,10 +26,17 @@ impl<T: Display> Display for AtomKind<T> {
             Self::Boolean(b) => write!(f, "{b}"),
             Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Identifier(id) => write!(f, "{id}"),
+            Self::Group(id) => write!(f, "({id})"),
         }
     }
 }
 
+/// Expressions are language constructions that intrinsically contains a return value. E.g
+///
+/// ```atiny
+/// let a = 2; b // b is the return value of the hole expression.
+/// ```
+///
 #[derive(Debug)]
 pub enum ExprKind {
     Atom(AtomKind<Expr>),
@@ -132,6 +141,7 @@ impl Display for VariableNode {
     }
 }
 
+/// Universal quantification as a type
 #[derive(Debug)]
 pub struct ForallNode {
     pub args: Vec<String>,

@@ -65,6 +65,7 @@ dependencies = [
  "atiny-location",
  "atiny-parser",
  "atiny-tree",
+ "itertools",
  "proc-macro2",
  "quote",
  "syn",

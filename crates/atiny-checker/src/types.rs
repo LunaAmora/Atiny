@@ -1,6 +1,9 @@
+//! Types and functions that describes the hindley-milner type system extended with higher kinded
+//! types and type constraints.
+//!
 use std::{
     cell::{RefCell, RefMut},
-    collections::{HashMap, BTreeMap},
+    collections::{BTreeMap, HashMap},
     fmt::{self, Display},
     hash::{Hash, Hasher},
     ptr::addr_of,
@@ -11,6 +14,12 @@ use itertools::Itertools;
 
 use super::context::Ctx;
 
+/// A type scheme is a prenex polymorphic construction that is used to express value dependency on
+/// types. E.g.
+///
+/// ```haskell
+/// forall a. a -> a
+/// ```
 #[derive(Debug)]
 pub struct TypeScheme {
     pub names: Vec<String>,
@@ -45,6 +54,8 @@ impl Display for TypeScheme {
     }
 }
 
+/// An empty or filled structure that is used for types that are about to find a value and is shared
+/// between multiple places.
 #[derive(Debug, Clone)]
 pub enum Hole {
     Empty(usize),
@@ -60,6 +71,7 @@ impl Display for Hole {
     }
 }
 
+/// A hole with a name.
 #[derive(Debug, Clone)]
 pub struct RefItem {
     pub name: String,
@@ -75,6 +87,7 @@ impl RefItem {
     }
 }
 
+/// A shared mutable reference to a hole.
 #[derive(Debug, Clone)]
 pub struct Ref(Rc<RefCell<RefItem>>);
 
@@ -144,6 +157,7 @@ impl Ref {
     }
 }
 
+/// A type that is not generalized but can contain arrow types, tuples and holes as part of it.
 #[derive(Debug, Clone)]
 pub enum MonoType {
     Var(String),
@@ -210,7 +224,7 @@ impl MonoType {
         Rc::new(Self::Hole(Ref::new(name, level)))
     }
 
-    pub fn generalize_type(&self, ctx: Ctx, holes: &mut BTreeMap<Ref, String>) -> Rc<Self> {
+    fn generalize_type(&self, ctx: Ctx, holes: &mut HashMap<Ref, String>) -> Rc<Self> {
         match self {
             Self::Var(_) => Rc::new(self.clone()),
 
