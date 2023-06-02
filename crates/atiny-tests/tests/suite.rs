@@ -35,7 +35,7 @@ mk_test! { "/suite/", |code| {
     ExprParser::new()
         .parse(&code)
         .map_err(from_lalrpop)
-        .and_then(|parsed| parsed.infer( default_context()))
+        .map(|parsed| parsed.infer(default_context()))
         .map(|x| x.to_string())
         .unwrap_or_else(|err| err.with_code(&code).to_string())
 } }

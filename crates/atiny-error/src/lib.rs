@@ -3,6 +3,7 @@ use std::fmt::Display;
 
 use atiny_location::ByteRange;
 
+#[derive(Clone)]
 pub struct Error {
     message: String,
     location: ByteRange,

@@ -3,8 +3,6 @@
 //! effects.
 use std::{fmt::Display, rc::Rc};
 
-use atiny_error::Error;
-
 use crate::{
     context::Ctx,
     types::{Hole, MonoType, Ref},
@@ -20,44 +18,49 @@ impl Display for OccursCheck {
 }
 
 /// Tries to find a general unifier for two types, it fails if these two types are not "equal".
-pub fn unify(ctx: Ctx, left: Rc<MonoType>, right: Rc<MonoType>) -> Result<(), Error> {
+pub fn unify(ctx: Ctx, left: Rc<MonoType>, right: Rc<MonoType>) -> bool {
     if Rc::ptr_eq(&left, &right) {
-        return Ok(());
+        return true;
     }
 
     match (&*left, &*right) {
-        (MonoType::Var(x), MonoType::Var(y)) if x == y => Ok(()),
+        (MonoType::Var(x), MonoType::Var(y)) if x == y => true,
 
         (MonoType::Arrow(l, r), MonoType::Arrow(l1, r1)) => {
-            unify(ctx.clone(), l.clone(), l1.clone())?;
-            unify(ctx, r.clone(), r1.clone())
+            unify(ctx.clone(), l.clone(), l1.clone()) && unify(ctx, r.clone(), r1.clone())
         }
 
-        (MonoType::Hole(l), MonoType::Hole(r)) if l == r => Ok(()),
+        (MonoType::Hole(l), MonoType::Hole(r)) if l == r => true,
 
         (MonoType::Hole(hole), _) => unify_hole(ctx, hole, right, false),
 
         (_, MonoType::Hole(hole)) => unify_hole(ctx, hole, left, true),
 
         (MonoType::Tuple(vec_l), MonoType::Tuple(vec_r)) if vec_l.len() == vec_r.len() => {
+            let mut res = true;
             for (l, r) in vec_l.iter().zip(vec_r.iter()) {
-                unify(ctx.clone(), l.clone(), r.clone())?;
+                res &= unify(ctx.clone(), l.clone(), r.clone());
             }
-            Ok(())
+            res
         }
+
+        (MonoType::Error, _) | (_, MonoType::Error) => true,
 
         (l, r) => ctx.error(format!("type mismatch between '{}' and '{}'", l, r)),
     }
 }
 
 /// This function unifies a hole with a type.
-fn unify_hole(ctx: Ctx, hole: &Ref, other: Rc<MonoType>, swap: bool) -> Result<(), Error> {
+fn unify_hole(ctx: Ctx, hole: &Ref, other: Rc<MonoType>, swap: bool) -> bool {
     match hole.get() {
         Hole::Empty(lvl) => match occur_check(hole, lvl, other.clone()) {
-            Err(occurs_check) => ctx.error(occurs_check.to_string()),
+            Err(occurs_check) => {
+                ctx.error(occurs_check.to_string());
+                false
+            }
             Ok(_) => {
                 hole.fill(other);
-                Ok(())
+                true
             }
         },
         Hole::Filled(filled) if swap => unify(ctx, other, filled),
@@ -95,6 +98,8 @@ fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), Occurs
         }
 
         MonoType::Var(_) => {}
+
+        MonoType::Error => {}
     }
 
     Ok(())
