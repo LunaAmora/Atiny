@@ -4,16 +4,7 @@ use atiny_checker::{context::Ctx, types::MonoType, Infer};
 use atiny_parser::{error::from_lalrpop, ExprParser};
 
 fn main() {
-    let code = "
-        |a| match a {
-            b => |x| |y| b,
-            c => {
-              let d = |x| c;
-              let e = |y| d;
-              e
-            }
-        }
-    ";
+    let code = "(|a| a) 2";
 
     let ctx = Ctx::default();
     let ctx = ctx.extend(
