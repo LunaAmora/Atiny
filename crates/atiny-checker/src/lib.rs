@@ -75,6 +75,7 @@ impl Infer<'_> for Expr {
                         Rc::new(MonoType::Error)
                     }
                 },
+
                 Group(expr) => expr.infer(ctx),
             },
 
@@ -162,6 +163,7 @@ impl<'a> Infer<'a> for Pattern {
                 Tuple(vec) => Rc::new(MonoType::Tuple(
                     vec.into_iter().map(|pat| pat.infer((ctx, set))).collect(),
                 )),
+
                 Group(expr) => expr.infer((ctx, set)),
             },
         }
@@ -203,6 +205,7 @@ impl Infer<'_> for Type {
                 mono: forall.body.infer(ctx.extend_types(&forall.args)),
             }
             .instantiate(ctx),
+
             TypeKind::Application(_) => todo!(),
 
             TypeKind::Unit => todo!(),

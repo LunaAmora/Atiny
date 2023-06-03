@@ -203,6 +203,7 @@ impl MonoType {
                 Hole::Filled(typ) => typ.substitute(substs),
                 Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
+
             Self::Error => Rc::new(Self::Error),
         }
     }
@@ -215,6 +216,7 @@ impl MonoType {
             mono: Rc::new(self.clone()),
         })
     }
+
     pub fn var(name: String) -> Rc<Self> {
         Rc::new(Self::Var(name))
     }
@@ -250,6 +252,7 @@ impl MonoType {
                 }
                 Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
+
             Self::Error => Rc::new(Self::Error),
         }
     }
