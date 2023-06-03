@@ -8,9 +8,10 @@ use atiny_location::ByteRange;
 
 use super::types::{MonoType, TypeScheme};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Ctx {
     counter: Rc<RefCell<usize>>,
+    pub errors: Rc<RefCell<Vec<Error>>>,
     pub map: im_rc::HashMap<String, Rc<TypeScheme>>,
     pub typ_map: im_rc::HashSet<String>,
     pub location: ByteRange,
@@ -25,6 +26,7 @@ impl Default for Ctx {
             typ_map: Default::default(),
             location: Default::default(),
             level: 0,
+            errors: Default::default(),
         }
     }
 }
@@ -95,8 +97,19 @@ impl Ctx {
         self.map.get(name).cloned()
     }
 
-    pub fn error<T>(&self, msg: String) -> Result<T, Error> {
-        Err(Error::new(msg, self.location))
+    pub fn error(&self, msg: String) {
+        self.errors
+            .borrow_mut()
+            .push(Error::new(msg, self.location));
+    }
+
+    pub fn get_errors(&self) -> Option<std::cell::Ref<'_, Vec<Error>>> {
+        let errors = self.errors.borrow();
+        (!errors.is_empty()).then_some(errors)
+    }
+
+    pub fn err_count(&self) -> usize {
+        self.errors.borrow().len()
     }
 
     /// Creates a new hole type.

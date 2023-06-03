@@ -32,12 +32,15 @@ pub fn default_context() -> Ctx {
 }
 
 mk_test! { "/suite/", |code| {
+    let ctx = default_context();
     ExprParser::new()
         .parse(&code)
-        .map_err(from_lalrpop)
-        .and_then(|parsed| parsed.infer( default_context()))
-        .map(|x| x.to_string())
-        .unwrap_or_else(|err| err.with_code(&code).to_string())
+        .map_err(|x| vec![from_lalrpop(x)])
+        .map(|parsed| (parsed.infer(ctx.clone()), ctx.get_errors()))
+        .and_then(|(typ, errors)| errors.map_or_else(|| Ok(typ.to_string()), |err| Err(err.clone())))
+        .unwrap_or_else(|errs| {
+            errs.into_iter().map(|x| x.with_code(&code).to_string()).collect()
+        })
 } }
 
 mk_test! { "/suite/parsing/", |code| {

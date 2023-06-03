@@ -4,7 +4,11 @@ use atiny_checker::{context::Ctx, types::MonoType, Infer};
 use atiny_parser::{error::from_lalrpop, ExprParser};
 
 fn main() {
-    let code = "(|a| a) 2";
+    let code = "
+        let a = to_string true;
+        let b = to_string false;
+        b
+    ";
 
     let ctx = Ctx::default();
     let ctx = ctx.extend(
@@ -29,12 +33,16 @@ fn main() {
 
     let result_type = ExprParser::new()
         .parse(code)
-        .map_err(from_lalrpop)
-        .and_then(|parsed| parsed.infer(ctx))
-        .unwrap_or_else(|err| {
-            eprintln!("{}", err.with_code(code));
+        .map_err(|x| vec![from_lalrpop(x)])
+        .map(|parsed| (parsed.infer(ctx.clone()), ctx.get_errors()))
+        .and_then(|(typ, errors)| errors.map_or_else(|| Ok(typ), |err| Err(err.clone())))
+        .unwrap_or_else(|errs| {
+            for err in errs {
+                eprintln!("{}", err.with_code(code));
+            }
+
             exit(1)
         });
 
-    println!("{}", result_type);
+    println!("Result: {}", result_type);
 }
