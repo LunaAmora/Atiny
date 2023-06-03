@@ -46,6 +46,24 @@ pub trait Check<'a> {
     fn check(self, ctx: Self::Context, typ: Rc<MonoType>);
 }
 
+impl Check<'_> for Expr {
+    type Context = Ctx;
+
+    fn check(self, ctx: Self::Context, expected: Rc<MonoType>) {
+        match (self.data, &*expected) {
+            (ExprKind::Abstraction(param, body), MonoType::Arrow(left, right)) => {
+                let new_ctx = ctx.extend(param, left.to_poly());
+                body.check(new_ctx, right.clone())
+            }
+            (data, _) => {
+                let located = Expr::new(self.location, data);
+                let infer = located.infer(ctx.clone());
+                unify::unify(ctx, infer, expected);
+            }
+        }
+    }
+}
+
 impl Infer<'_> for Expr {
     type Context = Ctx;
 
@@ -124,10 +142,7 @@ impl Infer<'_> for Expr {
 
             Annotation(expr, typ) => {
                 let typ_res = typ.infer(ctx.clone());
-                let expr_res = expr.infer(ctx.clone());
-
-                unify::unify(ctx, expr_res, typ_res.clone());
-
+                expr.check(ctx, typ_res.clone());
                 typ_res
             }
         }
@@ -206,7 +221,33 @@ impl Infer<'_> for Type {
             }
             .instantiate(ctx),
 
-            TypeKind::Application(_) => todo!(),
+            TypeKind::Application(application) => {
+                match ctx.signatures.types.get(&application.fun) {
+                    Some(sig) => {
+                        if sig.params.len() == application.args.len() {
+                            Rc::new(MonoType::Application(
+                                sig.name.clone(),
+                                application
+                                    .args
+                                    .into_iter()
+                                    .map(|typ| typ.infer(ctx.clone()))
+                                    .collect(),
+                            ))
+                        } else {
+                            ctx.error(format!(
+                                "expected {} arguments but got {} in type",
+                                sig.params.len(),
+                                application.args.len()
+                            ));
+                            Rc::new(MonoType::Error)
+                        }
+                    }
+                    None => {
+                        ctx.error(format!("unbound variable '{}'", application.fun));
+                        Rc::new(MonoType::Error)
+                    }
+                }
+            }
 
             TypeKind::Unit => todo!(),
         }

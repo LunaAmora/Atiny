@@ -108,8 +108,8 @@ TypeAtomItem : TypeKind = {
 TypeAtom : Type = Loc<TypeAtomItem>;
 
 TypeCallItem : TypeKind = {
-    <t:TypeCall> <a:TypeAtom> => todo!(),
-    <t:TypeAtom>  => t.data,
+    <fun: Id> <args: TypeAtom+> => TypeKind::Application(TypeApplicationNode { fun, args }),
+    <t:TypeAtom>         => t.data,
 }
 
 TypeCall : Type = Loc<TypeCallItem>;

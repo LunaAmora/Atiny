@@ -5,9 +5,7 @@ use atiny_parser::{error::from_lalrpop, ExprParser};
 
 fn main() {
     let code = "
-        let a = to_string true;
-        let b = to_string false;
-        b
+        (a : List Int)
     ";
 
     let ctx = Ctx::default();

@@ -89,6 +89,12 @@ pub struct Located<T> {
     pub data: T,
 }
 
+impl<T> Located<T> {
+    pub fn new(location: ByteRange, data: T) -> Self {
+        Self { location, data }
+    }
+}
+
 impl<T: Display> Display for Located<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.data)

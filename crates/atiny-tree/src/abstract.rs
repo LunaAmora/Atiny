@@ -86,6 +86,7 @@ pub type Expr = Located<ExprKind>;
 #[derive(Debug)]
 pub enum PatternKind {
     Atom(AtomKind<Pattern>),
+    // TODO: Add constructor pattern so something like (Cons x xs) works on patterns.
 }
 
 impl Display for PatternKind {
@@ -157,13 +158,14 @@ impl Display for ForallNode {
 
 #[derive(Debug)]
 pub struct TypeApplicationNode {
-    pub left: Box<Type>,
-    pub right: Box<Type>,
+    pub fun: String,
+    pub args: Vec<Type>,
 }
 
 impl Display for TypeApplicationNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {})", self.left, self.right)
+        let args = self.args.iter().join(" ");
+        write!(f, "({} {})", self.fun, args)
     }
 }
 

@@ -164,6 +164,7 @@ pub enum MonoType {
     Tuple(Vec<Rc<MonoType>>),
     Arrow(Rc<MonoType>, Rc<MonoType>),
     Hole(Ref),
+    Application(String, Vec<Rc<MonoType>>),
     Error,
 }
 
@@ -178,6 +179,7 @@ impl Display for MonoType {
                 Hole::Empty(0) => write!(f, "^{}", item.0.borrow().name),
                 Hole::Empty(lvl) => write!(f, "^{lvl}~{}", item.0.borrow().name),
             },
+            Self::Application(name, args) => write!(f, "({} {})", name, args.iter().join(" ")),
             Self::Error => write!(f, "ERROR"),
         }
     }
@@ -203,6 +205,11 @@ impl MonoType {
                 Hole::Filled(typ) => typ.substitute(substs),
                 Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
+
+            Self::Application(string, args) => Rc::new(Self::Application(
+                string.clone(),
+                args.iter().map(|a| a.substitute(substs)).collect(),
+            )),
 
             Self::Error => Rc::new(Self::Error),
         }
@@ -252,6 +259,13 @@ impl MonoType {
                 }
                 Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
+
+            Self::Application(fun, args) => Rc::new(Self::Application(
+                fun.clone(),
+                args.iter()
+                    .map(|a| a.generalize_type(ctx.clone(), holes))
+                    .collect(),
+            )),
 
             Self::Error => Rc::new(Self::Error),
         }
