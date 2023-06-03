@@ -6,9 +6,17 @@ use std::{cell::RefCell, rc::Rc};
 use atiny_error::Error;
 use atiny_location::ByteRange;
 
+use crate::types::{DeclSignature, TypeSignature};
+
 use super::types::{MonoType, TypeScheme};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
+pub struct Signatures {
+    pub types: im_rc::HashMap<String, TypeSignature>,
+    pub functions: im_rc::HashMap<String, DeclSignature>,
+}
+
+#[derive(Clone, Default)]
 pub struct Ctx {
     counter: Rc<RefCell<usize>>,
     pub errors: Rc<RefCell<Vec<Error>>>,
@@ -16,19 +24,7 @@ pub struct Ctx {
     pub typ_map: im_rc::HashSet<String>,
     pub location: ByteRange,
     pub level: usize,
-}
-
-impl Default for Ctx {
-    fn default() -> Self {
-        Self {
-            counter: Rc::new(RefCell::new(0)),
-            map: Default::default(),
-            typ_map: Default::default(),
-            location: Default::default(),
-            level: 0,
-            errors: Default::default(),
-        }
-    }
+    pub signatures: Signatures,
 }
 
 impl Ctx {

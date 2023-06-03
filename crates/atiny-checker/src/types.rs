@@ -268,3 +268,39 @@ impl MonoType {
         })
     }
 }
+
+/// Is the signature of a constructor of a type, as an example, the signature of the constructor of
+/// the `Ok` constructor is `forall a b. a -> Result a b`.
+#[derive(Clone)]
+pub struct ConstructorSignature {
+    pub name: String,
+    pub typ: Rc<TypeScheme>,
+}
+
+#[derive(Clone)]
+pub struct FunctionSignature {
+    pub name: String,
+    pub args: Vec<(String, Rc<MonoType>)>,
+    pub ret: Rc<MonoType>,
+}
+
+/// Is the signature of a function, as an example, the signature of the `map` function or the
+/// signature of a constructor like `Ok`.
+#[derive(Clone)]
+pub enum DeclSignature {
+    Function(FunctionSignature),
+    Constructor(Rc<ConstructorSignature>),
+}
+
+/// Type signature of a type e.g.
+///
+/// ```haskell
+/// type Result a b = Ok a | Err b
+/// ```
+///
+#[derive(Clone)]
+pub struct TypeSignature {
+    pub name: String,
+    pub params: Vec<String>,
+    pub constructors: Vec<Rc<ConstructorSignature>>,
+}
