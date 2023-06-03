@@ -164,6 +164,7 @@ pub enum MonoType {
     Tuple(Vec<Rc<MonoType>>),
     Arrow(Rc<MonoType>, Rc<MonoType>),
     Hole(Ref),
+    Error,
 }
 
 impl Display for MonoType {
@@ -177,6 +178,7 @@ impl Display for MonoType {
                 Hole::Empty(0) => write!(f, "^{}", item.0.borrow().name),
                 Hole::Empty(lvl) => write!(f, "^{lvl}~{}", item.0.borrow().name),
             },
+            Self::Error => write!(f, "ERROR"),
         }
     }
 }
@@ -201,6 +203,8 @@ impl MonoType {
                 Hole::Filled(typ) => typ.substitute(substs),
                 Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
+
+            Self::Error => Rc::new(Self::Error),
         }
     }
 }
@@ -212,6 +216,7 @@ impl MonoType {
             mono: Rc::new(self.clone()),
         })
     }
+
     pub fn var(name: String) -> Rc<Self> {
         Rc::new(Self::Var(name))
     }
@@ -247,6 +252,8 @@ impl MonoType {
                 }
                 Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
+
+            Self::Error => Rc::new(Self::Error),
         }
     }
 
@@ -260,4 +267,40 @@ impl MonoType {
             mono,
         })
     }
+}
+
+/// Is the signature of a constructor of a type, as an example, the signature of the constructor of
+/// the `Ok` constructor is `forall a b. a -> Result a b`.
+#[derive(Clone)]
+pub struct ConstructorSignature {
+    pub name: String,
+    pub typ: Rc<TypeScheme>,
+}
+
+#[derive(Clone)]
+pub struct FunctionSignature {
+    pub name: String,
+    pub args: Vec<(String, Rc<MonoType>)>,
+    pub ret: Rc<MonoType>,
+}
+
+/// Is the signature of a function, as an example, the signature of the `map` function or the
+/// signature of a constructor like `Ok`.
+#[derive(Clone)]
+pub enum DeclSignature {
+    Function(FunctionSignature),
+    Constructor(Rc<ConstructorSignature>),
+}
+
+/// Type signature of a type e.g.
+///
+/// ```haskell
+/// type Result a b = Ok a | Err b
+/// ```
+///
+#[derive(Clone)]
+pub struct TypeSignature {
+    pub name: String,
+    pub params: Vec<String>,
+    pub constructors: Vec<Rc<ConstructorSignature>>,
 }
