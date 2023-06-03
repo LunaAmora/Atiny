@@ -97,11 +97,19 @@ impl Ctx {
         self.map.get(name).cloned()
     }
 
-    pub fn error(&self, msg: String) -> bool {
+    pub fn error(&self, msg: String) {
         self.errors
             .borrow_mut()
             .push(Error::new(msg, self.location));
-        false
+    }
+
+    pub fn get_errors(&self) -> Option<std::cell::Ref<'_, Vec<Error>>> {
+        let errors = self.errors.borrow();
+        (!errors.is_empty()).then_some(errors)
+    }
+
+    pub fn err_count(&self) -> usize {
+        self.errors.borrow().len()
     }
 
     /// Creates a new hole type.

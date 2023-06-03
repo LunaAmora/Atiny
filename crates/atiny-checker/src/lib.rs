@@ -4,7 +4,6 @@
 use std::{collections::HashSet, rc::Rc};
 
 use atiny_tree::r#abstract::*;
-use itertools::Itertools;
 
 use self::{
     context::Ctx,
@@ -66,8 +65,9 @@ impl Infer<'_> for Expr {
                 Tuple(vec) => Rc::new(MonoType::Tuple(
                     vec.into_iter()
                         .map(|expr| expr.infer(ctx.clone()))
-                        .collect_vec(),
+                        .collect(),
                 )),
+
                 Identifier(x) => match ctx.lookup(&x) {
                     Some(sigma) => sigma.instantiate(ctx),
                     None => {
@@ -136,7 +136,7 @@ impl Infer<'_> for Expr {
 impl<'a> Infer<'a> for Pattern {
     type Context = (&'a mut Ctx, &'a mut HashSet<String>);
 
-    fn infer(self, (mut ctx, set): Self::Context) -> Rc<MonoType> {
+    fn infer(self, (ctx, set): Self::Context) -> Rc<MonoType> {
         use AtomKind::*;
         *ctx = ctx.set_position(self.location);
 
@@ -160,9 +160,7 @@ impl<'a> Infer<'a> for Pattern {
                 }
 
                 Tuple(vec) => Rc::new(MonoType::Tuple(
-                    vec.into_iter()
-                        .map(|pat| pat.infer((&mut ctx, set)))
-                        .collect(),
+                    vec.into_iter().map(|pat| pat.infer((ctx, set))).collect(),
                 )),
                 Group(expr) => expr.infer((ctx, set)),
             },
@@ -197,7 +195,7 @@ impl Infer<'_> for Type {
                     .types
                     .into_iter()
                     .map(|typ| typ.infer(ctx.clone()))
-                    .collect_vec(),
+                    .collect(),
             )),
 
             TypeKind::Forall(forall) => TypeScheme {
