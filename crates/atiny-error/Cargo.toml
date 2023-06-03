@@ -8,3 +8,6 @@ edition = "2021"
 [dependencies]
 
 atiny-location = {path = "../atiny-location" }
+
+[lints]
+workspace = true

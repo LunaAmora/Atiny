@@ -17,3 +17,6 @@ atiny-error = {path = "../atiny-error" }
 
 [build-dependencies]
 lalrpop = {version = "0.20.0", default-features = false, features = ["lexer", "unicode"]}
+
+[lints]
+workspace = true

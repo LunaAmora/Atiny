@@ -11,3 +11,6 @@ atiny-tree = {path = "../atiny-tree" }
 atiny-error = {path = "../atiny-error" }
 im-rc = "15.1.0"
 itertools = "0.10.5"
+
+[lints]
+workspace = true

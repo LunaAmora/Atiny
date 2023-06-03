@@ -272,8 +272,8 @@ pub type TopLevel = Located<TopLevelKind>;
 impl Display for TopLevelKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TopLevelKind::TypeDecl(td) => write!(f, "{}", td),
-            TopLevelKind::FnDecl(fd) => write!(f, "{}", fd),
+            Self::TypeDecl(td) => write!(f, "{}", td),
+            Self::FnDecl(fd) => write!(f, "{}", fd),
         }
     }
 }

@@ -11,3 +11,6 @@ atiny-tree = {path = "../atiny-tree" }
 atiny-error = {path = "../atiny-error" }
 atiny-parser = {path = "../atiny-parser" }
 atiny-checker = {path = "../atiny-checker" }
+
+[lints]
+workspace = true

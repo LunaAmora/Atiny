@@ -9,3 +9,10 @@ members = [
     "crates/atiny-location",
     "crates/atiny-tests",
 ]
+
+[workspace.lints.clippy]
+all = "warn"
+nursery = "warn"
+use_self = "warn"
+missing_const_for_fn = "allow"
+semicolon_if_nothing_returned = "warn"
