@@ -80,7 +80,7 @@ pub fn test_runner(tests: &[&Test]) {
                                 fs::write(path, result).map_err(|err| err.to_string())
                             }
                         })),
-                    })
+                    });
                 }
             } else {
                 break;
