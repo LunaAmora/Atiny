@@ -11,6 +11,7 @@ use self::{
 };
 
 pub mod context;
+pub mod top_level;
 pub mod types;
 pub mod unify;
 
