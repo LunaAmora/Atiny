@@ -50,13 +50,16 @@ impl Check<'_> for Expr {
     type Context = Ctx;
 
     fn check(self, ctx: Self::Context, expected: Rc<MonoType>) {
+        let ctx = ctx.set_position(self.location);
+
         match (self.data, &*expected) {
             (ExprKind::Abstraction(param, body), MonoType::Arrow(left, right)) => {
                 let new_ctx = ctx.extend(param, left.to_poly());
-                body.check(new_ctx, right.clone())
+                body.check(new_ctx, right.clone());
             }
+
             (data, _) => {
-                let located = Expr::new(self.location, data);
+                let located = Self::new(self.location, data);
                 let infer = located.infer(ctx.clone());
                 unify::unify(ctx, infer, expected);
             }
@@ -88,10 +91,7 @@ impl Infer<'_> for Expr {
 
                 Identifier(x) => match ctx.lookup(&x) {
                     Some(sigma) => sigma.instantiate(ctx),
-                    None => {
-                        ctx.error(format!("unbound variable '{}'", x));
-                        Rc::new(MonoType::Error)
-                    }
+                    None => ctx.new_error(format!("unbound variable '{}'", x)),
                 },
 
                 Group(expr) => expr.infer(ctx),
@@ -164,16 +164,13 @@ impl<'a> Infer<'a> for Pattern {
 
                 Boolean(_) => MonoType::var("Bool".to_string()),
 
-                Identifier(x) => {
-                    if !set.insert(x.to_owned()) {
-                        ctx.error(format!("identifier '{}' bound more than once", x));
-                        return Rc::new(MonoType::Error);
-                    }
-
+                Identifier(x) if set.insert(x.to_owned()) => {
                     let hole = ctx.new_hole();
                     *ctx = ctx.extend(x, hole.to_poly());
                     hole
                 }
+
+                Identifier(x) => ctx.new_error(format!("identifier '{}' bound more than once", x)),
 
                 Tuple(vec) => Rc::new(MonoType::Tuple(
                     vec.into_iter().map(|pat| pat.infer((ctx, set))).collect(),
@@ -198,14 +195,9 @@ impl Infer<'_> for Type {
                 MonoType::arrow(left, right)
             }
 
-            TypeKind::Variable(v) => {
-                if ctx.typ_map.contains(&v.name) {
-                    MonoType::var(v.name)
-                } else {
-                    ctx.error(format!("unbound type variable '{}'", v.name));
-                    Rc::new(MonoType::Error)
-                }
-            }
+            TypeKind::Variable(v) if ctx.typ_map.contains(&v.name) => MonoType::var(v.name),
+
+            TypeKind::Variable(v) => ctx.new_error(format!("unbound type variable '{}'", v.name)),
 
             TypeKind::Tuple(tuple) => Rc::new(MonoType::Tuple(
                 tuple
@@ -221,35 +213,32 @@ impl Infer<'_> for Type {
             }
             .instantiate(ctx),
 
-            TypeKind::Application(application) => {
-                match ctx.signatures.types.get(&application.fun) {
-                    Some(sig) => {
-                        if sig.params.len() == application.args.len() {
-                            Rc::new(MonoType::Application(
-                                sig.name.clone(),
-                                application
-                                    .args
-                                    .into_iter()
-                                    .map(|typ| typ.infer(ctx.clone()))
-                                    .collect(),
-                            ))
-                        } else {
-                            ctx.error(format!(
-                                "expected {} arguments but got {} in type",
-                                sig.params.len(),
-                                application.args.len()
-                            ));
-                            Rc::new(MonoType::Error)
-                        }
-                    }
-                    None => {
-                        ctx.error(format!("unbound variable '{}'", application.fun));
-                        Rc::new(MonoType::Error)
-                    }
-                }
-            }
+            TypeKind::Application(app) => match ctx.signatures.types.get(&app.fun) {
+                Some(sig) if sig.params.len() == app.args.len() => Rc::new(MonoType::Application(
+                    sig.name.clone(),
+                    app.args
+                        .into_iter()
+                        .map(|typ| typ.infer(ctx.clone()))
+                        .collect(),
+                )),
+
+                Some(sig) => ctx.new_error(format!(
+                    "expected {} arguments but got {} in type",
+                    sig.params.len(),
+                    app.args.len()
+                )),
+
+                None => ctx.new_error(format!("unbound variable '{}'", app.fun)),
+            },
 
             TypeKind::Unit => todo!(),
         }
+    }
+}
+
+impl Ctx {
+    fn new_error(&self, msg: String) -> Rc<MonoType> {
+        self.error(msg);
+        Rc::new(MonoType::Error)
     }
 }
