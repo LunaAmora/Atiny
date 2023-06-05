@@ -47,6 +47,12 @@ pub enum ExprKind {
     Annotation(Box<Expr>, Box<Type>),
 }
 
+impl Default for ExprKind {
+    fn default() -> Self {
+        Self::Atom(AtomKind::Unit)
+    }
+}
+
 impl Display for ExprKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -86,12 +92,20 @@ pub type Expr = Located<ExprKind>;
 #[derive(Debug)]
 pub enum PatternKind {
     Atom(AtomKind<Pattern>),
+    Constructor(String, Vec<Pattern>),
 }
 
 impl Display for PatternKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Atom(i) => write!(f, "{}", i),
+            Self::Constructor(name, args) => {
+                write!(
+                    f,
+                    "({name}{})",
+                    args.iter().map(|x| format!(" {x}")).join("")
+                )
+            }
         }
     }
 }
@@ -157,13 +171,14 @@ impl Display for ForallNode {
 
 #[derive(Debug)]
 pub struct TypeApplicationNode {
-    pub left: Box<Type>,
-    pub right: Box<Type>,
+    pub fun: String,
+    pub args: Vec<Type>,
 }
 
 impl Display for TypeApplicationNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {})", self.left, self.right)
+        let args = self.args.iter().join(" ");
+        write!(f, "({} {})", self.fun, args)
     }
 }
 
@@ -239,8 +254,8 @@ impl Display for TypeDecl {
 pub struct FnDecl {
     pub name: String,
     pub params: Vec<(String, Type)>,
-    pub r#return: Box<Type>,
-    pub body: Expr,
+    pub ret: Box<Type>,
+    pub body: Option<Expr>,
 }
 
 impl Display for FnDecl {
@@ -254,7 +269,12 @@ impl Display for FnDecl {
         write!(
             f,
             "(fn {} {} : {} {{{}}})",
-            self.name, params, self.r#return, self.body
+            self.name,
+            params,
+            self.ret,
+            self.body
+                .as_ref()
+                .map_or_else(|| Expr::default().to_string(), |b| b.to_string())
         )
     }
 }

@@ -47,6 +47,18 @@ pub fn unify(ctx: Ctx, left: Rc<MonoType>, right: Rc<MonoType>) {
             }
         }
 
+        (MonoType::Application(name, args), MonoType::Application(name1, args1))
+            if name == name1 && args.len() == args1.len() =>
+        {
+            let err_count = ctx.err_count();
+            for (l, r) in args.iter().zip(args1.iter()) {
+                unify(ctx.clone(), l.clone(), r.clone());
+                if ctx.err_count() > err_count {
+                    return;
+                }
+            }
+        }
+
         (MonoType::Error, _) | (_, MonoType::Error) => {}
 
         (l, r) => ctx.error(format!("type mismatch between '{}' and '{}'", l, r)),
@@ -70,6 +82,12 @@ fn unify_hole(ctx: Ctx, hole: &Ref, other: Rc<MonoType>, swap: bool) {
 /// order to fix the level to the current region.
 fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), OccursCheck> {
     match &*other {
+        MonoType::Application(_, args) => {
+            for arg in args.clone() {
+                occur_check(hole, lvl, arg)?;
+            }
+        }
+
         MonoType::Hole(other_hole) if hole == other_hole => return Err(OccursCheck),
 
         MonoType::Hole(other_hole) => match other_hole.get() {

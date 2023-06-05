@@ -164,6 +164,7 @@ pub enum MonoType {
     Tuple(Vec<Rc<MonoType>>),
     Arrow(Rc<MonoType>, Rc<MonoType>),
     Hole(Ref),
+    Application(String, Vec<Rc<MonoType>>),
     Error,
 }
 
@@ -178,6 +179,7 @@ impl Display for MonoType {
                 Hole::Empty(0) => write!(f, "^{}", item.0.borrow().name),
                 Hole::Empty(lvl) => write!(f, "^{lvl}~{}", item.0.borrow().name),
             },
+            Self::Application(name, args) => write!(f, "({} {})", name, args.iter().join(" ")),
             Self::Error => write!(f, "ERROR"),
         }
     }
@@ -203,6 +205,11 @@ impl MonoType {
                 Hole::Filled(typ) => typ.substitute(substs),
                 Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
+
+            Self::Application(string, args) => Rc::new(Self::Application(
+                string.clone(),
+                args.iter().map(|a| a.substitute(substs)).collect(),
+            )),
 
             Self::Error => Rc::new(Self::Error),
         }
@@ -253,6 +260,13 @@ impl MonoType {
                 Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
             },
 
+            Self::Application(fun, args) => Rc::new(Self::Application(
+                fun.clone(),
+                args.iter()
+                    .map(|a| a.generalize_type(ctx.clone(), holes))
+                    .collect(),
+            )),
+
             Self::Error => Rc::new(Self::Error),
         }
     }
@@ -271,25 +285,70 @@ impl MonoType {
 
 /// Is the signature of a constructor of a type, as an example, the signature of the constructor of
 /// the `Ok` constructor is `forall a b. a -> Result a b`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConstructorSignature {
     pub name: String,
+    pub args: Vec<Rc<MonoType>>,
     pub typ: Rc<TypeScheme>,
 }
 
-#[derive(Clone)]
+impl Display for ConstructorSignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "| {} {}", self.name, self.typ)
+    }
+}
+
+impl ConstructorSignature {
+    pub fn new(
+        name: String,
+        names: Vec<String>,
+        mono: Rc<MonoType>,
+        args: Vec<Rc<MonoType>>,
+    ) -> Self {
+        Self {
+            name,
+            typ: TypeScheme { names, mono }.into(),
+            args,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct FunctionSignature {
     pub name: String,
     pub args: Vec<(String, Rc<MonoType>)>,
     pub ret: Rc<MonoType>,
+    pub entire_type: Rc<TypeScheme>,
+    pub type_variables: Vec<String>,
+}
+
+impl Display for FunctionSignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let params = self
+            .args
+            .iter()
+            .map(|(n, t)| format!("({} : {})", n, t))
+            .join(" ");
+
+        write!(f, "(fn {} {} : {})", self.name, params, self.ret)
+    }
 }
 
 /// Is the signature of a function, as an example, the signature of the `map` function or the
 /// signature of a constructor like `Ok`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum DeclSignature {
     Function(FunctionSignature),
     Constructor(Rc<ConstructorSignature>),
+}
+
+impl Display for DeclSignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Function(fs) => write!(f, "{}", fs),
+            Self::Constructor(cs) => write!(f, "{}", cs),
+        }
+    }
 }
 
 /// Type signature of a type e.g.
@@ -298,9 +357,21 @@ pub enum DeclSignature {
 /// type Result a b = Ok a | Err b
 /// ```
 ///
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TypeSignature {
     pub name: String,
     pub params: Vec<String>,
     pub constructors: Vec<Rc<ConstructorSignature>>,
+}
+
+impl Display for TypeSignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let params = self.params.iter().map(|x| format!(" {x}")).join("");
+        let constructors = self.constructors.iter().join("\n        ");
+        write!(
+            f,
+            "(type {}{} =\n        {})",
+            self.name, params, constructors
+        )
+    }
 }
