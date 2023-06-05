@@ -89,9 +89,12 @@ pub struct Located<T> {
     pub data: T,
 }
 
-impl<T> Located<T> {
-    pub fn new(location: ByteRange, data: T) -> Self {
-        Self { location, data }
+impl<T: Default> Default for Located<T> {
+    fn default() -> Self {
+        Self {
+            location: Default::default(),
+            data: Default::default(),
+        }
     }
 }
 
@@ -101,8 +104,21 @@ impl<T: Display> Display for Located<T> {
     }
 }
 
+impl<T: Clone> Clone for Located<T> {
+    fn clone(&self) -> Self {
+        Self {
+            location: self.location,
+            data: self.data.clone(),
+        }
+    }
+}
+
 impl<T> Located<T> {
-    pub fn map<R>(self, f: impl Fn(T) -> R) -> Located<R> {
+    pub fn new(location: ByteRange, data: T) -> Self {
+        Self { location, data }
+    }
+
+    pub fn map<R>(self, f: impl FnOnce(T) -> R) -> Located<R> {
         Located {
             location: self.location,
             data: f(self.data),

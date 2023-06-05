@@ -1,19 +1,27 @@
 //! The context is primarily a list of bindings from variable names to type that is on the left side
 //! of a type judgment.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use atiny_error::Error;
 use atiny_location::ByteRange;
+use itertools::Itertools;
 
 use crate::types::{DeclSignature, TypeSignature};
 
 use super::types::{MonoType, TypeScheme};
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Signatures {
     pub types: im_rc::HashMap<String, TypeSignature>,
-    pub functions: im_rc::HashMap<String, DeclSignature>,
+    pub values: im_rc::HashMap<String, DeclSignature>,
+}
+
+impl Display for Signatures {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Types:\n    {}", self.types.values().join("\n    "))?;
+        writeln!(f, "\nValues:\n    {}", self.values.values().join("\n    "))
+    }
 }
 
 #[derive(Clone, Default)]

@@ -147,11 +147,11 @@ Param : (String, Type) = {
 }
 
 FnDecl : FnDecl = {
-    "fn" <name: Id> <params: Param*> ":" <r#return: Type> "{" <body: Expr> "}" => FnDecl {
+    "fn" <name: Id> <params: Param*> ":" <ret: Type> "{" <body: Expr> "}" => FnDecl {
         name,
         params,
-        r#return: Box::new(r#return),
-        body
+        ret: Box::new(ret),
+        body: Some(body)
     }
 } 
 

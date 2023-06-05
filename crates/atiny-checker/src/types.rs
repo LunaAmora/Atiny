@@ -285,25 +285,62 @@ impl MonoType {
 
 /// Is the signature of a constructor of a type, as an example, the signature of the constructor of
 /// the `Ok` constructor is `forall a b. a -> Result a b`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConstructorSignature {
     pub name: String,
     pub typ: Rc<TypeScheme>,
 }
 
-#[derive(Clone)]
+impl Display for ConstructorSignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "| {} {}", self.name, self.typ)
+    }
+}
+
+impl ConstructorSignature {
+    pub fn new(name: String, names: Vec<String>, mono: Rc<MonoType>) -> Self {
+        Self {
+            name,
+            typ: TypeScheme { names, mono }.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct FunctionSignature {
     pub name: String,
     pub args: Vec<(String, Rc<MonoType>)>,
     pub ret: Rc<MonoType>,
+    pub type_variables: Vec<String>,
+}
+
+impl Display for FunctionSignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let params = self
+            .args
+            .iter()
+            .map(|(n, t)| format!("({} : {})", n, t))
+            .join(" ");
+
+        write!(f, "(fn {} {} : {})", self.name, params, self.ret)
+    }
 }
 
 /// Is the signature of a function, as an example, the signature of the `map` function or the
 /// signature of a constructor like `Ok`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum DeclSignature {
     Function(FunctionSignature),
     Constructor(Rc<ConstructorSignature>),
+}
+
+impl Display for DeclSignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Function(fs) => write!(f, "{}", fs),
+            Self::Constructor(cs) => write!(f, "{}", cs),
+        }
+    }
 }
 
 /// Type signature of a type e.g.
@@ -312,9 +349,21 @@ pub enum DeclSignature {
 /// type Result a b = Ok a | Err b
 /// ```
 ///
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TypeSignature {
     pub name: String,
     pub params: Vec<String>,
     pub constructors: Vec<Rc<ConstructorSignature>>,
+}
+
+impl Display for TypeSignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let params = self.params.iter().map(|x| format!(" {x}")).join("");
+        let constructors = self.constructors.iter().join("\n        ");
+        write!(
+            f,
+            "(type {}{} =\n        {})",
+            self.name, params, constructors
+        )
+    }
 }

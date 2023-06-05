@@ -47,6 +47,12 @@ pub enum ExprKind {
     Annotation(Box<Expr>, Box<Type>),
 }
 
+impl Default for ExprKind {
+    fn default() -> Self {
+        Self::Atom(AtomKind::Unit)
+    }
+}
+
 impl Display for ExprKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -241,8 +247,8 @@ impl Display for TypeDecl {
 pub struct FnDecl {
     pub name: String,
     pub params: Vec<(String, Type)>,
-    pub r#return: Box<Type>,
-    pub body: Expr,
+    pub ret: Box<Type>,
+    pub body: Option<Expr>,
 }
 
 impl Display for FnDecl {
@@ -256,7 +262,12 @@ impl Display for FnDecl {
         write!(
             f,
             "(fn {} {} : {} {{{}}})",
-            self.name, params, self.r#return, self.body
+            self.name,
+            params,
+            self.ret,
+            self.body
+                .as_ref()
+                .map_or_else(|| Expr::default().to_string(), |b| b.to_string())
         )
     }
 }
