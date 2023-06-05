@@ -14,12 +14,15 @@ use itertools::Itertools;
 
 use super::context::Ctx;
 
+pub type Type = Rc<MonoType>;
+
 /// A type scheme is a prenex polymorphic construction that is used to express value dependency on
 /// types. E.g.
 ///
 /// ```haskell
 /// forall a. a -> a
 /// ```
+
 #[derive(Debug)]
 pub struct TypeScheme {
     pub names: Vec<String>,

@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::{collections::HashSet, iter, rc::Rc};
 
 use atiny_tree::r#abstract::{
-    Constructor, Expr, FnDecl, TopLevel, TopLevelKind, Type, TypeDecl, TypeKind,
+    Constructor, Expr, FnDecl, TopLevel, TopLevelKind, TypeDecl, TypeKind, TypeNode,
 };
 
 use crate::{
@@ -10,8 +10,9 @@ use crate::{
     types::{
         ConstructorSignature, DeclSignature, FunctionSignature, MonoType, TypeScheme, TypeSignature,
     },
-    Check, Infer,
 };
+
+use crate::{check::Check, infer::Infer};
 
 struct TopIter<'a> {
     vec: Vec<TopLevel>,
@@ -156,7 +157,7 @@ impl Ctx {
         fn_decl.body.map(|body| (fn_decl.name, body))
     }
 
-    fn free_variables(&self, ty: &Type, set: &mut HashSet<String>) {
+    fn free_variables(&self, ty: &TypeNode, set: &mut HashSet<String>) {
         match &ty.data {
             TypeKind::Arrow(arrow) => {
                 self.free_variables(&arrow.left, set);
