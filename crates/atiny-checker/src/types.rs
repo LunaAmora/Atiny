@@ -288,6 +288,7 @@ impl MonoType {
 #[derive(Clone, Debug)]
 pub struct ConstructorSignature {
     pub name: String,
+    pub args: Vec<Rc<MonoType>>,
     pub typ: Rc<TypeScheme>,
 }
 
@@ -298,10 +299,16 @@ impl Display for ConstructorSignature {
 }
 
 impl ConstructorSignature {
-    pub fn new(name: String, names: Vec<String>, mono: Rc<MonoType>) -> Self {
+    pub fn new(
+        name: String,
+        names: Vec<String>,
+        mono: Rc<MonoType>,
+        args: Vec<Rc<MonoType>>,
+    ) -> Self {
         Self {
             name,
             typ: TypeScheme { names, mono }.into(),
+            args,
         }
     }
 }
@@ -311,6 +318,7 @@ pub struct FunctionSignature {
     pub name: String,
     pub args: Vec<(String, Rc<MonoType>)>,
     pub ret: Rc<MonoType>,
+    pub entire_type: Rc<TypeScheme>,
     pub type_variables: Vec<String>,
 }
 

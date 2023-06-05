@@ -179,6 +179,38 @@ impl<'a> Infer<'a> for Pattern {
 
                 Group(expr) => expr.infer((ctx, set)),
             },
+
+            PatternKind::Constructor(name, args) => {
+                let Some(constructor) = ctx.lookup_constructor(&name) else {
+                    return ctx.new_error(format!("unbound constructor '{}'", name));
+                };
+
+                if constructor.args.len() != args.len() {
+                    return ctx.new_error(format!(
+                        "constructor '{}' expects {} arguments, but got {}",
+                        name,
+                        constructor.args.len(),
+                        args.len()
+                    ));
+                }
+
+                let mut typ = constructor.typ.instantiate(ctx.clone());
+
+                for pat in args {
+                    let pat_ty = pat.infer((ctx, set));
+
+                    let result = if let MonoType::Arrow(left, right) = &*typ {
+                        unify::unify(ctx.clone(), pat_ty.clone(), left.clone());
+                        right.clone()
+                    } else {
+                        unreachable!("impossible branch when matching constructor arguments")
+                    };
+
+                    typ = result;
+                }
+
+                typ
+            }
         }
     }
 }
@@ -232,7 +264,7 @@ impl Infer<'_> for Type {
                 None => ctx.new_error(format!("unbound variable '{}'", app.fun)),
             },
 
-            TypeKind::Unit => todo!(),
+            TypeKind::Unit => MonoType::var("()".to_string()),
         }
     }
 }

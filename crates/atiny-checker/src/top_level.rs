@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::{collections::HashSet, iter, rc::Rc};
 
 use atiny_tree::r#abstract::{
@@ -6,7 +7,9 @@ use atiny_tree::r#abstract::{
 
 use crate::{
     context::Ctx,
-    types::{ConstructorSignature, DeclSignature, FunctionSignature, MonoType, TypeSignature},
+    types::{
+        ConstructorSignature, DeclSignature, FunctionSignature, MonoType, TypeScheme, TypeSignature,
+    },
     Check, Infer,
 };
 
@@ -47,9 +50,9 @@ impl Ctx {
             .map(|type_decl| self.add_type_decl(type_decl))
             .collect();
 
-        for (decl_name, contructors) in constructors {
-            for contructor in contructors {
-                self.add_type_constr(&decl_name, contructor);
+        for (decl_name, constructors) in constructors {
+            for constructor in constructors {
+                self.add_type_constr(&decl_name, constructor);
             }
         }
 
@@ -87,10 +90,15 @@ impl Ctx {
             sig.params.iter().cloned().map(MonoType::var).collect(),
         ));
 
-        let constructor_type = constr
+        let args: Vec<_> = constr
             .types
             .into_iter()
             .map(|t| t.infer(ctx.clone()))
+            .collect();
+
+        let constructor_type = args
+            .iter()
+            .cloned()
             .chain(iter::once(application))
             .reduce(MonoType::arrow)
             .unwrap();
@@ -99,6 +107,7 @@ impl Ctx {
             constr.name.clone(),
             sig.params.clone(),
             constructor_type,
+            args,
         ));
 
         sig.constructors.push(value.clone());
@@ -118,7 +127,7 @@ impl Ctx {
         let mut ctx = self.clone();
         ctx.typ_map.extend(set.iter());
 
-        let args = fn_decl
+        let args: Vec<_> = fn_decl
             .params
             .into_iter()
             .map(|(a, p)| (a, p.infer(ctx.clone())))
@@ -126,11 +135,20 @@ impl Ctx {
 
         let ret = fn_decl.ret.infer(ctx);
 
+        let type_variables: Vec<String> = set.into_iter().collect();
+
+        let entire_type = make_function_type(
+            type_variables.clone(),
+            &args.iter().map(|x| x.1.clone()).collect_vec(),
+            ret.clone(),
+        );
+
         let sig = DeclSignature::Function(FunctionSignature {
             name: fn_decl.name.clone(),
             args,
             ret,
-            type_variables: set.into_iter().collect(),
+            type_variables,
+            entire_type,
         });
 
         self.signatures.values.insert(fn_decl.name.clone(), sig);
@@ -183,4 +201,21 @@ impl Ctx {
 
         body.check(ctx, sig.ret.clone());
     }
+}
+
+fn make_function_type(
+    type_variables: Vec<String>,
+    args: &[Rc<MonoType>],
+    ret: Rc<MonoType>,
+) -> Rc<TypeScheme> {
+    let entire_type = Rc::new(TypeScheme {
+        names: type_variables,
+        mono: args
+            .iter()
+            .cloned()
+            .chain(iter::once(ret))
+            .reduce(MonoType::arrow)
+            .unwrap(),
+    });
+    entire_type
 }

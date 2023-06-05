@@ -7,7 +7,7 @@ use atiny_error::Error;
 use atiny_location::ByteRange;
 use itertools::Itertools;
 
-use crate::types::{DeclSignature, TypeSignature};
+use crate::types::{ConstructorSignature, DeclSignature, TypeSignature};
 
 use super::types::{MonoType, TypeScheme};
 
@@ -98,7 +98,22 @@ impl Ctx {
 
     /// Looks up a type variable name in the context.
     pub fn lookup(&self, name: &str) -> Option<Rc<TypeScheme>> {
-        self.map.get(name).cloned()
+        self.map.get(name).cloned().or_else(|| {
+            self.signatures.values.get(name).map(|decl| match decl {
+                DeclSignature::Function(fun) => fun.entire_type.clone(),
+                DeclSignature::Constructor(decl) => decl.typ.clone(),
+            })
+        })
+    }
+
+    pub fn lookup_constructor(&self, name: &str) -> Option<Rc<ConstructorSignature>> {
+        self.signatures
+            .values
+            .get(name)
+            .and_then(|decl| match decl {
+                DeclSignature::Function(_) => None,
+                DeclSignature::Constructor(cons) => Some(cons.clone()),
+            })
     }
 
     pub fn error(&self, msg: String) {

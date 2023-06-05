@@ -9,19 +9,18 @@ fn main() {
             | Ok t
             | Err e
         
-        type List a = 
-            | Cons a (List a)
-            | Nil
-        
-        fn ata (a: T) (b: T) : T {
-            |x| {
-                let c = 2;
-                c
+        fn ata : Int {
+            match Ok (Ok 2) {
+                Ok (Ok x) => x
             }
         }
     ";
 
     let mut ctx = Ctx::default();
+
+    ctx = ctx.extend_type("Int".to_string());
+    ctx = ctx.extend_type("Bool".to_string());
+
     ctx = ctx.extend(
         "add".to_string(),
         MonoType::arrow(

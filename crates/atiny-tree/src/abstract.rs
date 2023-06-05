@@ -92,13 +92,20 @@ pub type Expr = Located<ExprKind>;
 #[derive(Debug)]
 pub enum PatternKind {
     Atom(AtomKind<Pattern>),
-    // TODO: Add constructor pattern so something like (Cons x xs) works on patterns.
+    Constructor(String, Vec<Pattern>),
 }
 
 impl Display for PatternKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Atom(i) => write!(f, "{}", i),
+            Self::Constructor(name, args) => {
+                write!(
+                    f,
+                    "({name}{})",
+                    args.iter().map(|x| format!(" {x}")).join("")
+                )
+            }
         }
     }
 }
