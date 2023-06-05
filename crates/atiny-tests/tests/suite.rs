@@ -1,7 +1,7 @@
 #![feature(custom_test_frameworks)]
 #![test_runner(atiny_tests::test_runner)]
 
-use atiny_checker::Infer;
+use atiny_checker::infer::Infer;
 use atiny_checker::{context::Ctx, types::MonoType};
 use atiny_parser::{error::from_lalrpop, ExprParser, ProgramParser};
 

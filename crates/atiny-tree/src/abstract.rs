@@ -44,7 +44,7 @@ pub enum ExprKind {
     Abstraction(String, Box<Expr>),
     Application(Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
-    Annotation(Box<Expr>, Box<Type>),
+    Annotation(Box<Expr>, Box<TypeNode>),
 }
 
 impl Default for ExprKind {
@@ -134,8 +134,8 @@ impl Display for Clause {
 
 #[derive(Debug)]
 pub struct ArrowNode {
-    pub left: Box<Type>,
-    pub right: Box<Type>,
+    pub left: Box<TypeNode>,
+    pub right: Box<TypeNode>,
 }
 
 impl Display for ArrowNode {
@@ -159,7 +159,7 @@ impl Display for VariableNode {
 #[derive(Debug)]
 pub struct ForallNode {
     pub args: Vec<String>,
-    pub body: Box<Type>,
+    pub body: Box<TypeNode>,
 }
 
 impl Display for ForallNode {
@@ -172,7 +172,7 @@ impl Display for ForallNode {
 #[derive(Debug)]
 pub struct TypeApplicationNode {
     pub fun: String,
-    pub args: Vec<Type>,
+    pub args: Vec<TypeNode>,
 }
 
 impl Display for TypeApplicationNode {
@@ -184,7 +184,7 @@ impl Display for TypeApplicationNode {
 
 #[derive(Debug)]
 pub struct TypeTupleNode {
-    pub types: Vec<Type>,
+    pub types: Vec<TypeNode>,
 }
 
 impl Display for TypeTupleNode {
@@ -216,12 +216,12 @@ impl Display for TypeKind {
     }
 }
 
-pub type Type = Located<TypeKind>;
+pub type TypeNode = Located<TypeKind>;
 
 #[derive(Debug)]
 pub struct Constructor {
     pub name: String,
-    pub types: Vec<Type>,
+    pub types: Vec<TypeNode>,
 }
 
 impl Display for Constructor {
@@ -253,8 +253,8 @@ impl Display for TypeDecl {
 #[derive(Debug)]
 pub struct FnDecl {
     pub name: String,
-    pub params: Vec<(String, Type)>,
-    pub ret: Box<Type>,
+    pub params: Vec<(String, TypeNode)>,
+    pub ret: Box<TypeNode>,
     pub body: Option<Expr>,
 }
 
