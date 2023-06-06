@@ -61,7 +61,7 @@ pub fn unify(ctx: Ctx, left: Rc<MonoType>, right: Rc<MonoType>) {
 
         (MonoType::Error, _) | (_, MonoType::Error) => {}
 
-        (l, r) => ctx.error(format!("type mismatch between '{:?}' and '{:?}'", l, r)),
+        (l, r) => ctx.error(format!("type mismatch between '{}' and '{}'", l, r)),
     }
 }
 
