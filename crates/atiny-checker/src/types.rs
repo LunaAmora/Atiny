@@ -29,6 +29,10 @@ pub struct TypeScheme {
 }
 
 impl TypeScheme {
+    pub fn new(names: Vec<String>, mono: Type) -> Rc<Self> {
+        Rc::new(Self { names, mono })
+    }
+
     pub fn instantiate(&self, ctx: Ctx) -> Type {
         let mut types = Vec::new();
 
@@ -193,6 +197,10 @@ impl MonoType {
             },
             _ => self,
         }
+    }
+
+    pub fn rfold_arrow<I: DoubleEndedIterator<Item = Type>>(iter: I, end: Type) -> Type {
+        iter.rfold(end, |x, y| Self::arrow(y, x))
     }
 }
 

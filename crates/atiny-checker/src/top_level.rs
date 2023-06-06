@@ -1,5 +1,4 @@
-use itertools::Itertools;
-use std::{collections::HashSet, iter, rc::Rc};
+use std::{collections::HashSet, rc::Rc};
 
 use atiny_tree::r#abstract::{
     Constructor, Expr, FnDecl, TopLevel, TopLevelKind, TypeDecl, TypeKind, TypeNode,
@@ -98,10 +97,7 @@ impl Ctx {
             .map(|t| t.infer(ctx.clone()))
             .collect();
 
-        let constructor_type = args
-            .iter()
-            .cloned()
-            .rfold(application, |x, y| MonoType::arrow(y, x));
+        let constructor_type = MonoType::rfold_arrow(args.iter().cloned(), application);
 
         let value = Rc::new(ConstructorSignature::new(
             constr.name.clone(),
@@ -142,11 +138,8 @@ impl Ctx {
 
         let type_variables: Vec<String> = set.into_iter().collect();
 
-        let entire_type = make_function_type(
-            type_variables.clone(),
-            &args.iter().map(|x| x.1.clone()).collect_vec(),
-            ret.clone(),
-        );
+        let arrow = MonoType::rfold_arrow(args.iter().map(|(_, ty)| ty.clone()), ret.clone());
+        let entire_type = TypeScheme::new(type_variables.clone(), arrow);
 
         let sig = DeclSignature::Function(FunctionSignature {
             name: fn_decl.name.clone(),
@@ -205,21 +198,4 @@ impl Ctx {
 
         body.check(ctx, sig.ret.clone());
     }
-}
-
-fn make_function_type(
-    type_variables: Vec<String>,
-    args: &[Rc<MonoType>],
-    ret: Rc<MonoType>,
-) -> Rc<TypeScheme> {
-    let entire_type = Rc::new(TypeScheme {
-        names: type_variables,
-        mono: args
-            .iter()
-            .cloned()
-            .chain(iter::once(ret))
-            .reduce(MonoType::arrow)
-            .unwrap(),
-    });
-    entire_type
 }
