@@ -168,13 +168,13 @@ impl Row {
                 vec![self.inline(vec![wildcard(); size])]
             }
             PatternKind::Or(left, right) => {
-                let mut left = self.clone().preppend(*left).default_row(ctx);
-                let mut right = self.preppend(*right).default_row(ctx);
+                let mut left = self.clone().preppend(*left).specialize_tuple(ctx, size);
+                let mut right = self.preppend(*right).specialize_tuple(ctx, size);
                 left.append(&mut right);
                 left
             }
             PatternKind::Atom(AtomKind::Group(pat)) => {
-                self.pop_front().preppend(*pat).default_row(ctx)
+                self.pop_front().preppend(*pat).specialize_tuple(ctx, size)
             }
             PatternKind::Atom(AtomKind::Tuple(pats)) => vec![self.inline(pats)],
             _ => vec![],
