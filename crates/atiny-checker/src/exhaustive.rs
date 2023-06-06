@@ -663,7 +663,7 @@ impl Problem {
         } else {
             // The first pattern of the case will guide the specialization of the whole problem.
             match self.case.first().clone().data {
-                PatternKind::Atom(AtomKind::Identifier(n)) if ctx.lookup_type(&n).is_none() => {
+                PatternKind::Atom(AtomKind::Identifier(n)) if ctx.lookup_cons(&n).is_none() => {
                     self.exhaustiveness_wildcard(ctx)
                 }
                 PatternKind::Atom(atom) => match atom {
