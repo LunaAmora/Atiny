@@ -3,16 +3,36 @@ use std::fmt::Display;
 
 use atiny_location::ByteRange;
 
-#[derive(Clone)]
+pub enum ErrorKind {
+    Static(String),
+    Dynamic(Box<dyn Fn() -> String>),
+}
+
+impl Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Static(s) => write!(f, "{}", s),
+            Self::Dynamic(d) => write!(f, "{}", d()),
+        }
+    }
+}
+
 pub struct Error {
-    message: String,
+    message: ErrorKind,
     location: ByteRange,
 }
 
 impl Error {
     pub fn new(message: impl Into<String>, location: ByteRange) -> Self {
         Self {
-            message: message.into(),
+            message: ErrorKind::Static(message.into()),
+            location,
+        }
+    }
+
+    pub fn new_dyn(message: impl Display + 'static, location: ByteRange) -> Self {
+        Self {
+            message: ErrorKind::Dynamic(Box::new(move || message.to_string())),
             location,
         }
     }

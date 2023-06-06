@@ -14,8 +14,8 @@ fn main() {
 
         fn ata (x: List Int) : Int {
             match Nil {
-                Cons true _ => 2,
-                Nil         => 4,
+                Cons true (Cons _ true) => 2,
+                Nil                     => 4,
             }
         }
     ";
@@ -52,13 +52,12 @@ fn main() {
         .to_poly(),
     );
 
-    let _ = ProgramParser::new()
+    ProgramParser::new()
         .parse(code)
         .map_err(|x| vec![from_lalrpop(x)])
         .and_then(|x| {
             ctx.add_top_level_types(x);
-            ctx.get_errors()
-                .map_or_else(|| Ok(format!("{}", ctx.signatures)), |err| Err(err.clone()))
+            ctx.take_errors().map_or_else(|| Ok(()), Err)
         })
         .unwrap_or_else(|errs| {
             for err in errs {

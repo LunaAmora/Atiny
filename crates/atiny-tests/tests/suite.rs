@@ -36,8 +36,8 @@ mk_test! { "/suite/", |code| {
     ExprParser::new()
         .parse(&code)
         .map_err(|x| vec![from_lalrpop(x)])
-        .map(|parsed| (parsed.infer(ctx.clone()), ctx.get_errors()))
-        .and_then(|(typ, errors)| errors.map_or_else(|| Ok(typ.to_string()), |err| Err(err.clone())))
+        .map(|parsed| (parsed.infer(ctx.clone()), ctx.take_errors()))
+        .and_then(|(typ, errors)| errors.map_or_else(|| Ok(typ.to_string()), Err))
         .unwrap_or_else(|errs| {
             errs.into_iter().map(|x| x.with_code(&code).to_string()).collect()
         })
