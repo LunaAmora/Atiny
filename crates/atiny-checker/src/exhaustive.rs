@@ -198,6 +198,7 @@ impl Row {
             PatternKind::Constructor(name, args) if name == constructor.name => {
                 vec![self.inline(args)]
             }
+
             PatternKind::Atom(AtomKind::Identifier(name)) if ctx.lookup_cons(&name).is_some() => {
                 if name == constructor.name {
                     // c | pi2...pin
@@ -588,7 +589,7 @@ impl Problem {
     /// match some_value {}
     /// ```
     ///
-    /// This code about is non exhaustive if the type of `some_value` is `Option<T>`. Because it
+    /// This code above is non exhaustive if the type of `some_value` is `Option<T>`. Because it
     /// lacks two cases, `Some` and `None`. So `is_empty` means that there are no cases that match
     /// this specific problem.
     ///

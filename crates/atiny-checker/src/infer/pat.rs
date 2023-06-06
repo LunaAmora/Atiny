@@ -17,7 +17,7 @@ impl<'a> Infer<'a> for Pattern {
 
         match self.data {
             PatternKind::Atom(a) => match a {
-                Number(_) => Rc::new(MonoType::Application("Int".to_string(), vec![])),
+                Number(_) => MonoType::typ("Int".to_string()),
 
                 Identifier(x) if ctx.lookup_cons(&x).is_some() => {
                     Self::new(self.location, PatternKind::Constructor(x, vec![])).infer((ctx, set))
@@ -73,10 +73,11 @@ impl<'a> Infer<'a> for Pattern {
 
                 typ
             }
+
             PatternKind::Or(left, right) => {
                 // TODO: Check if both side are correct
 
-                // Clones are used here to avoid side effect os on the other patterns because it
+                // Clones are used here to avoid side effects on the other patterns because it
                 // needs to be treated in a special way
 
                 let mut right_set = set.clone();

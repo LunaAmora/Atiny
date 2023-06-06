@@ -21,13 +21,14 @@ impl Infer<'_> for TypeNode {
 
             TypeKind::Variable(v) => {
                 if ctx.signatures.types.get(&v.name).is_some() {
-                    Rc::new(MonoType::Application(v.name, vec![]))
+                    MonoType::typ(v.name)
                 } else if ctx.typ_map.contains(&v.name) {
                     MonoType::var(v.name)
                 } else {
                     ctx.new_error(format!("unbound type variable '{}'", v.name))
                 }
             }
+
             TypeKind::Tuple(tuple) => Rc::new(MonoType::Tuple(
                 tuple
                     .types

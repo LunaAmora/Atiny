@@ -19,7 +19,7 @@ impl Infer<'_> for Expr {
 
         match self.data {
             Atom(a) => match a {
-                Number(_) => Rc::new(MonoType::Application("Int".to_string(), vec![])),
+                Number(_) => MonoType::typ("Int".to_string()),
 
                 Tuple(vec) => Rc::new(MonoType::Tuple(
                     vec.into_iter()

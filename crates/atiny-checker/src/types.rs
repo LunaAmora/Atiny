@@ -185,8 +185,8 @@ pub enum MonoType {
 }
 
 impl MonoType {
-    pub fn iter(self: Type) -> Iter {
-        Iter { typ: self }
+    pub fn iter(self: Type) -> TypeIter {
+        TypeIter { typ: self }
     }
 
     pub fn flatten(self: Type) -> Type {
@@ -439,11 +439,11 @@ impl Display for TypeSignature {
     }
 }
 
-pub struct Iter {
+pub struct TypeIter {
     pub typ: Type,
 }
 
-impl Iterator for Iter {
+impl Iterator for TypeIter {
     type Item = Type;
 
     fn next(&mut self) -> Option<Self::Item> {
