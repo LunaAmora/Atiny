@@ -40,8 +40,18 @@ impl<'a> Display for ErrorWithCode<'a> {
         let code = self.code.lines().collect::<Vec<_>>();
         let lines = code[location.0.line..=location.1.line].to_vec();
 
+        let inline = location.0.line == location.1.line;
+        let idx = location.1.line - location.0.line;
+
         for (i, line) in lines.iter().enumerate() {
             writeln!(f, "{:>3} | {}", location.0.line + i, line)?;
+
+            let indent = location.0.column;
+            let size = location.1.column - location.0.column;
+
+            if inline && i == idx {
+                writeln!(f, "{:>3} | {: >indent$}{:^>size$}", "", "", "")?;
+            }
         }
 
         Ok(())

@@ -1,33 +1,43 @@
 use std::process::exit;
 
-use atiny_checker::{context::Ctx, types::MonoType};
+use atiny_checker::{
+    context::Ctx,
+    types::{MonoType, TypeSignature, TypeValue},
+};
 use atiny_parser::{error::from_lalrpop, ProgramParser};
 
 fn main() {
     let code = "
-        type Result t e =
-            | Ok t
-            | Err e
-        
-        fn ata : Int {
-            match Ok (Ok 2) {
-                Ok (Ok x) => x
+        type List t = | Cons t (List t) | Nil
+        type Unit = | Unit
+        type Bool = | true | false
+
+        fn ata (x: List Int) : Int {
+            match Nil {
+                Cons true _ => 2,
+                Nil         => 4,
             }
         }
     ";
 
     let mut ctx = Ctx::default();
 
-    ctx = ctx.extend_type("Int".to_string());
-    ctx = ctx.extend_type("Bool".to_string());
+    ctx.signatures.types.insert(
+        "Int".to_string(),
+        TypeSignature {
+            name: "Int".to_string(),
+            params: vec![],
+            value: TypeValue::Opaque,
+        },
+    );
 
     ctx = ctx.extend(
         "add".to_string(),
         MonoType::arrow(
-            MonoType::var("Int".to_string()),
+            MonoType::typ("Int".to_string()),
             MonoType::arrow(
-                MonoType::var("Int".to_string()),
-                MonoType::var("Int".to_string()),
+                MonoType::typ("Int".to_string()),
+                MonoType::typ("Int".to_string()),
             ),
         )
         .to_poly(),
@@ -36,13 +46,13 @@ fn main() {
     ctx = ctx.extend(
         "to_string".to_string(),
         MonoType::arrow(
-            MonoType::var("Int".to_string()),
-            MonoType::var("String".to_string()),
+            MonoType::typ("Int".to_string()),
+            MonoType::typ("String".to_string()),
         )
         .to_poly(),
     );
 
-    let result_type = ProgramParser::new()
+    let _ = ProgramParser::new()
         .parse(code)
         .map_err(|x| vec![from_lalrpop(x)])
         .and_then(|x| {
@@ -57,6 +67,4 @@ fn main() {
 
             exit(1)
         });
-
-    println!("{}", result_type);
 }

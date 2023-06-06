@@ -2,9 +2,11 @@
 
 use super::Infer;
 use crate::check::Check;
+use crate::exhaustive::{CaseTree, Problem, Witness};
 use crate::{context::Ctx, types::*, unify::unify};
 
-use atiny_tree::r#abstract::{AtomKind, Expr, ExprKind};
+use atiny_tree::r#abstract::*;
+use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};
 
 impl Infer<'_> for Expr {
@@ -17,11 +19,7 @@ impl Infer<'_> for Expr {
 
         match self.data {
             Atom(a) => match a {
-                Unit => MonoType::var("()".to_string()),
-
-                Number(_) => MonoType::var("Int".to_string()),
-
-                Boolean(_) => MonoType::var("Bool".to_string()),
+                Number(_) => Rc::new(MonoType::Application("Int".to_string(), vec![])),
 
                 Tuple(vec) => Rc::new(MonoType::Tuple(
                     vec.into_iter()
@@ -67,14 +65,29 @@ impl Infer<'_> for Expr {
             }
 
             Match(e, clauses) => {
+                let err_count = ctx.err_count();
+
                 let pat_ty = e.infer(ctx.clone());
                 let ret_ty = ctx.new_hole();
+
+                let columns = clauses.iter().map(|x| x.pat.clone()).collect_vec();
 
                 for c in clauses {
                     let mut set = HashSet::new();
                     let clause_pat = c.pat.infer((&mut ctx, &mut set));
                     unify(ctx.clone(), pat_ty.clone(), clause_pat);
                     unify(ctx.clone(), ret_ty.clone(), c.expr.infer(ctx.clone()));
+                }
+
+                // We can't do coverage checking / exhaustiveness checking without a well typed
+                // pattern match and with linear variables.
+                if ctx.err_count() == err_count {
+                    let problem = Problem::new(pat_ty, vec![wildcard()], columns);
+                    let witness = problem.exhaustiveness(&mut ctx);
+
+                    let _ = report_exhaustiveness(witness).map_err(|err| {
+                        ctx.new_error(format!("non-exhaustive pattern match: {}", err))
+                    });
                 }
 
                 ret_ty
@@ -86,5 +99,12 @@ impl Infer<'_> for Expr {
                 typ_res
             }
         }
+    }
+}
+
+fn report_exhaustiveness(witness: Witness) -> Result<CaseTree, Pattern> {
+    match witness {
+        Witness::NonExhaustive(result) => Err(result.into_pattern()),
+        Witness::Ok(res) => Ok(res),
     }
 }

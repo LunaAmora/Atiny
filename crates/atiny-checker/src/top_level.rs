@@ -8,7 +8,8 @@ use atiny_tree::r#abstract::{
 use crate::{
     context::Ctx,
     types::{
-        ConstructorSignature, DeclSignature, FunctionSignature, MonoType, TypeScheme, TypeSignature,
+        ConstructorSignature, DeclSignature, FunctionSignature, MonoType, TypeScheme,
+        TypeSignature, TypeValue,
     },
 };
 
@@ -71,7 +72,7 @@ impl Ctx {
         let type_sig = TypeSignature {
             name: type_decl.name.clone(),
             params: type_decl.params.clone(),
-            constructors: Vec::new(),
+            value: TypeValue::Sum(Vec::new()),
         };
 
         self.signatures
@@ -100,9 +101,7 @@ impl Ctx {
         let constructor_type = args
             .iter()
             .cloned()
-            .chain(iter::once(application))
-            .reduce(MonoType::arrow)
-            .unwrap();
+            .rfold(application, |x, y| MonoType::arrow(y, x));
 
         let value = Rc::new(ConstructorSignature::new(
             constr.name.clone(),
@@ -111,7 +110,12 @@ impl Ctx {
             args,
         ));
 
-        sig.constructors.push(value.clone());
+        match &mut sig.value {
+            TypeValue::Sum(ref mut sum) => {
+                sum.push(value.clone());
+            }
+            TypeValue::Opaque => {}
+        }
 
         self.signatures
             .values
@@ -184,7 +188,6 @@ impl Ctx {
                     self.free_variables(arg, set);
                 }
             }
-            TypeKind::Unit => {}
         }
     }
 

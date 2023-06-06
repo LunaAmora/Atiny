@@ -106,7 +106,7 @@ impl Ctx {
         })
     }
 
-    pub fn lookup_constructor(&self, name: &str) -> Option<Rc<ConstructorSignature>> {
+    pub fn lookup_cons(&self, name: &str) -> Option<Rc<ConstructorSignature>> {
         self.signatures
             .values
             .get(name)
@@ -114,6 +114,10 @@ impl Ctx {
                 DeclSignature::Function(_) => None,
                 DeclSignature::Constructor(cons) => Some(cons.clone()),
             })
+    }
+
+    pub fn lookup_type(&self, name: &str) -> Option<&TypeSignature> {
+        self.signatures.types.get(name)
     }
 
     pub fn error(&self, msg: String) {

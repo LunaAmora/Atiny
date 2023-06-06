@@ -13,10 +13,10 @@ pub fn default_context() -> Ctx {
         .extend(
             "add".to_string(),
             MonoType::arrow(
-                MonoType::var("Int".to_string()),
+                MonoType::typ("Int".to_string()),
                 MonoType::arrow(
-                    MonoType::var("Int".to_string()),
-                    MonoType::var("Int".to_string()),
+                    MonoType::typ("Int".to_string()),
+                    MonoType::typ("Int".to_string()),
                 ),
             )
             .to_poly(),
@@ -24,8 +24,8 @@ pub fn default_context() -> Ctx {
         .extend(
             "to_string".to_string(),
             MonoType::arrow(
-                MonoType::var("Int".to_string()),
-                MonoType::var("String".to_string()),
+                MonoType::typ("Int".to_string()),
+                MonoType::typ("String".to_string()),
             )
             .to_poly(),
         )

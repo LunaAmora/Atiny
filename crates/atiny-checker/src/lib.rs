@@ -8,3 +8,5 @@ pub mod unify;
 
 pub mod check;
 pub mod infer;
+
+pub mod exhaustive;

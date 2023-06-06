@@ -26,12 +26,10 @@ Sep<U, T>: Vec<T> = {
 
 ExprAtomItem: AtomKind<Expr> = {
     <n:Num>            => AtomKind::Number(n),
-    "true"             => AtomKind::Boolean(true),
-    "false"            => AtomKind::Boolean(false),
     <id: Id>           => AtomKind::Identifier(id),
     "(" <mut vec:Sep<",", Expr>> ")" => {
         match vec.len() {
-            0 => AtomKind::Unit,
+            0 => AtomKind::Identifier("Unit".to_string()),
             1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
             _ => AtomKind::Tuple(vec),
         }
@@ -65,12 +63,10 @@ pub Expr : Expr = Loc<ExprItem>;
 
 PatAtomItem: AtomKind<Pattern> = {
     <n:Num>            => AtomKind::Number(n),
-    "true"             => AtomKind::Boolean(true),
-    "false"            => AtomKind::Boolean(false),
     <id: Id>           => AtomKind::Identifier(id),
     "(" <mut vec:Sep<",", Pattern>> ")" => {
         match vec.len() {
-            0 => AtomKind::Unit,
+            0 => AtomKind::Identifier("Unit".to_string()),
             1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
             _ => AtomKind::Tuple(vec),
         }
@@ -100,11 +96,11 @@ TypeAtomItem : TypeKind = {
     <id: Id>                    => TypeKind::Variable(VariableNode { name: id }),
     "(" <mut types:Sep<",", TypeNode>> ")" => {
         match types.len() {
-            0 => TypeKind::Unit,
+            0 => TypeKind::Variable(VariableNode {name : "Unit".to_string()}),
             1 => types.pop().unwrap().data,
             _ => TypeKind::Tuple(TypeTupleNode { types }),
         }
-    },
+    }
 }
 
 TypeAtom : TypeNode = Loc<TypeAtomItem>;

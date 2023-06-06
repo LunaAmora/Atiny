@@ -4,15 +4,13 @@
 
 use std::fmt::{self, Display};
 
-use atiny_location::Located;
+use atiny_location::{Byte, ByteRange, Located};
 use itertools::Itertools;
 
 /// Primary expressions that are used both for [Pattern] and [Expr].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AtomKind<T> {
-    Unit,
     Number(u64),
-    Boolean(bool),
     Tuple(Vec<T>),
     Identifier(String),
     Group(Box<T>),
@@ -21,9 +19,7 @@ pub enum AtomKind<T> {
 impl<T: Display> Display for AtomKind<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unit => write!(f, "()"),
             Self::Number(n) => write!(f, "{n}"),
-            Self::Boolean(b) => write!(f, "{b}"),
             Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Identifier(id) => write!(f, "{id}"),
             Self::Group(id) => write!(f, "({id})"),
@@ -45,12 +41,6 @@ pub enum ExprKind {
     Application(Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     Annotation(Box<Expr>, Box<TypeNode>),
-}
-
-impl Default for ExprKind {
-    fn default() -> Self {
-        Self::Atom(AtomKind::Unit)
-    }
 }
 
 impl Display for ExprKind {
@@ -89,16 +79,20 @@ pub type Expr = Located<ExprKind>;
 
 /// A pattern is a syntactic element that goes inside pattern match declarations and are used to
 /// match on values and destruct them.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PatternKind {
     Atom(AtomKind<Pattern>),
     Constructor(String, Vec<Pattern>),
+    Or(Box<Pattern>, Box<Pattern>),
 }
 
 impl Display for PatternKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Atom(i) => write!(f, "{}", i),
+            Self::Constructor(name, args) if args.is_empty() => {
+                write!(f, "{}", name)
+            }
             Self::Constructor(name, args) => {
                 write!(
                     f,
@@ -106,11 +100,26 @@ impl Display for PatternKind {
                     args.iter().map(|x| format!(" {x}")).join("")
                 )
             }
+            Self::Or(a, b) => write!(f, "({a} | {b})"),
         }
     }
 }
 
 pub type Pattern = Located<PatternKind>;
+
+impl PatternKind {
+    pub fn is_variable(&self) -> bool {
+        matches!(self, Self::Atom(AtomKind::Identifier(_)))
+    }
+}
+
+/// Creates a wildcard pattern
+pub fn wildcard() -> Pattern {
+    Pattern {
+        location: ByteRange(Byte(0), Byte(0)),
+        data: PatternKind::Atom(AtomKind::Identifier("_".to_string())),
+    }
+}
 
 /// This is a clause of a pattern match declaration. It contains a pattern and an expression that is
 /// the result of the match.
@@ -200,7 +209,6 @@ pub enum TypeKind {
     Forall(ForallNode),
     Application(TypeApplicationNode),
     Tuple(TypeTupleNode),
-    Unit,
 }
 
 impl Display for TypeKind {
@@ -211,7 +219,6 @@ impl Display for TypeKind {
             Self::Forall(n) => write!(f, "{}", n),
             Self::Application(n) => write!(f, "{}", n),
             Self::Tuple(n) => write!(f, "{}", n),
-            Self::Unit => write!(f, "()"),
         }
     }
 }
@@ -266,16 +273,12 @@ impl Display for FnDecl {
             .map(|(n, t)| format!("({} : {})", n, t))
             .join(" ");
 
-        write!(
-            f,
-            "(fn {} {} : {} {{{}}})",
-            self.name,
-            params,
-            self.ret,
-            self.body
-                .as_ref()
-                .map_or_else(|| Expr::default().to_string(), |b| b.to_string())
-        )
+        let body = self
+            .body
+            .as_ref()
+            .map_or_else(|| ";".to_string(), |b| format!("{{{}}}", b));
+
+        write!(f, "fn {} {} : {} {}", self.name, params, self.ret, body)
     }
 }
 

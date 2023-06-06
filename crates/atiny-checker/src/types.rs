@@ -3,7 +3,7 @@
 //!
 use std::{
     cell::{RefCell, RefMut},
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt::{self, Display},
     hash::{Hash, Hasher},
     ptr::addr_of,
@@ -22,21 +22,30 @@ pub type Type = Rc<MonoType>;
 /// ```haskell
 /// forall a. a -> a
 /// ```
-
 #[derive(Debug)]
 pub struct TypeScheme {
     pub names: Vec<String>,
-    pub mono: Rc<MonoType>,
+    pub mono: Type,
 }
 
 impl TypeScheme {
-    pub fn instantiate(&self, ctx: Ctx) -> Rc<MonoType> {
+    pub fn instantiate(&self, ctx: Ctx) -> Type {
+        let mut types = Vec::new();
+
+        for _ in &self.names {
+            types.push(MonoType::new_hole(ctx.new_name(), ctx.level));
+        }
+
+        self.instantiate_with(&types)
+    }
+
+    pub fn instantiate_with(&self, types: &[Type]) -> Type {
         let substitutions = self
             .names
             .iter()
             .cloned()
-            .map(|x| (x, MonoType::new_hole(ctx.new_name(), ctx.level)))
-            .collect::<HashMap<String, Rc<MonoType>>>();
+            .zip(types.iter().cloned())
+            .collect::<HashMap<String, Type>>();
 
         self.mono.substitute(&substitutions)
     }
@@ -62,7 +71,7 @@ impl Display for TypeScheme {
 #[derive(Debug, Clone)]
 pub enum Hole {
     Empty(usize),
-    Filled(Rc<MonoType>),
+    Filled(Type),
 }
 
 impl Display for Hole {
@@ -139,7 +148,7 @@ impl Ref {
         })))
     }
 
-    pub fn fill(&self, typ: Rc<MonoType>) {
+    pub fn fill(&self, typ: Type) {
         self.0.as_ref().borrow_mut().data = Hole::Filled(typ);
     }
 
@@ -164,11 +173,27 @@ impl Ref {
 #[derive(Debug, Clone)]
 pub enum MonoType {
     Var(String),
-    Tuple(Vec<Rc<MonoType>>),
-    Arrow(Rc<MonoType>, Rc<MonoType>),
+    Tuple(Vec<Type>),
+    Arrow(Type, Type),
     Hole(Ref),
-    Application(String, Vec<Rc<MonoType>>),
+    Application(String, Vec<Type>),
     Error,
+}
+
+impl MonoType {
+    pub fn iter(self: Type) -> Iter {
+        Iter { typ: self }
+    }
+
+    pub fn flatten(self: Type) -> Type {
+        match &*self {
+            Self::Hole(hole) => match hole.get() {
+                Hole::Filled(f) => f.flatten(),
+                Hole::Empty(_) => self,
+            },
+            _ => self,
+        }
+    }
 }
 
 impl Display for MonoType {
@@ -182,6 +207,7 @@ impl Display for MonoType {
                 Hole::Empty(0) => write!(f, "^{}", item.0.borrow().name),
                 Hole::Empty(lvl) => write!(f, "^{lvl}~{}", item.0.borrow().name),
             },
+            Self::Application(name, args) if args.is_empty() => write!(f, "{}", name),
             Self::Application(name, args) => write!(f, "({} {})", name, args.iter().join(" ")),
             Self::Error => write!(f, "ERROR"),
         }
@@ -229,6 +255,10 @@ impl MonoType {
 
     pub fn var(name: String) -> Rc<Self> {
         Rc::new(Self::Var(name))
+    }
+
+    pub fn typ(name: String) -> Rc<Self> {
+        Rc::new(Self::Application(name, vec![]))
     }
 
     pub fn arrow(from: Rc<Self>, to: Rc<Self>) -> Rc<Self> {
@@ -291,7 +321,7 @@ impl MonoType {
 #[derive(Clone, Debug)]
 pub struct ConstructorSignature {
     pub name: String,
-    pub args: Vec<Rc<MonoType>>,
+    pub args: Vec<Type>,
     pub typ: Rc<TypeScheme>,
 }
 
@@ -302,12 +332,7 @@ impl Display for ConstructorSignature {
 }
 
 impl ConstructorSignature {
-    pub fn new(
-        name: String,
-        names: Vec<String>,
-        mono: Rc<MonoType>,
-        args: Vec<Rc<MonoType>>,
-    ) -> Self {
+    pub fn new(name: String, names: Vec<String>, mono: Type, args: Vec<Type>) -> Self {
         Self {
             name,
             typ: TypeScheme { names, mono }.into(),
@@ -319,8 +344,8 @@ impl ConstructorSignature {
 #[derive(Clone, Debug)]
 pub struct FunctionSignature {
     pub name: String,
-    pub args: Vec<(String, Rc<MonoType>)>,
-    pub ret: Rc<MonoType>,
+    pub args: Vec<(String, Type)>,
+    pub ret: Type,
     pub entire_type: Rc<TypeScheme>,
     pub type_variables: Vec<String>,
 }
@@ -354,6 +379,12 @@ impl Display for DeclSignature {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum TypeValue {
+    Sum(Vec<Rc<ConstructorSignature>>),
+    Opaque,
+}
+
 /// Type signature of a type e.g.
 ///
 /// ```haskell
@@ -364,17 +395,56 @@ impl Display for DeclSignature {
 pub struct TypeSignature {
     pub name: String,
     pub params: Vec<String>,
-    pub constructors: Vec<Rc<ConstructorSignature>>,
+    pub value: TypeValue,
+}
+
+impl TypeSignature {
+    pub fn get_constructors(&self) -> Option<HashSet<String>> {
+        match &self.value {
+            TypeValue::Sum(constructors) => Some(
+                constructors
+                    .iter()
+                    .map(|x| x.name.clone())
+                    .collect::<HashSet<_>>(),
+            ),
+            TypeValue::Opaque => None,
+        }
+    }
+}
+
+impl Display for TypeValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Sum(constructors) => {
+                let constructors = constructors.iter().join("\n        ");
+                write!(f, "{}", constructors)
+            }
+            Self::Opaque => write!(f, "opaque"),
+        }
+    }
 }
 
 impl Display for TypeSignature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let params = self.params.iter().map(|x| format!(" {x}")).join("");
-        let constructors = self.constructors.iter().join("\n        ");
-        write!(
-            f,
-            "(type {}{} =\n        {})",
-            self.name, params, constructors
-        )
+        write!(f, "type {}{}", self.name, params)
+    }
+}
+
+pub struct Iter {
+    pub typ: Type,
+}
+
+impl Iterator for Iter {
+    type Item = Type;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &*self.typ.clone().flatten() {
+            MonoType::Arrow(from, to) => {
+                self.typ = to.clone();
+                Some(from.clone())
+            }
+            _ => None,
+        }
     }
 }

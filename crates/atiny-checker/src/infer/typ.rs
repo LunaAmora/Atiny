@@ -19,10 +19,15 @@ impl Infer<'_> for TypeNode {
                 MonoType::arrow(left, right)
             }
 
-            TypeKind::Variable(v) if ctx.typ_map.contains(&v.name) => MonoType::var(v.name),
-
-            TypeKind::Variable(v) => ctx.new_error(format!("unbound type variable '{}'", v.name)),
-
+            TypeKind::Variable(v) => {
+                if ctx.signatures.types.get(&v.name).is_some() {
+                    Rc::new(MonoType::Application(v.name, vec![]))
+                } else if ctx.typ_map.contains(&v.name) {
+                    MonoType::var(v.name)
+                } else {
+                    ctx.new_error(format!("unbound type variable '{}'", v.name))
+                }
+            }
             TypeKind::Tuple(tuple) => Rc::new(MonoType::Tuple(
                 tuple
                     .types
@@ -55,8 +60,6 @@ impl Infer<'_> for TypeNode {
 
                 None => ctx.new_error(format!("unbound variable '{}'", app.fun)),
             },
-
-            TypeKind::Unit => MonoType::var("()".to_string()),
         }
     }
 }
