@@ -83,7 +83,6 @@ pub type Expr = Located<ExprKind>;
 pub enum PatternKind {
     Atom(AtomKind<Pattern>),
     Constructor(String, Vec<Pattern>),
-    Or(Box<Pattern>, Box<Pattern>),
 }
 
 impl Display for PatternKind {
@@ -100,7 +99,6 @@ impl Display for PatternKind {
                     args.iter().map(|x| format!(" {x}")).join("")
                 )
             }
-            Self::Or(a, b) => write!(f, "({a} | {b})"),
         }
     }
 }

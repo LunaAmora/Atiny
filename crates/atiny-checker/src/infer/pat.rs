@@ -73,25 +73,6 @@ impl<'a> Infer<'a> for Pattern {
 
                 typ
             }
-
-            PatternKind::Or(left, right) => {
-                // TODO: Check if both side are correct
-
-                // Clones are used here to avoid side effects on the other patterns because it
-                // needs to be treated in a special way
-
-                let mut right_set = set.clone();
-
-                let left_ty = left.infer((ctx, set));
-                let right_ty = right.infer((ctx, &mut right_set));
-
-                // TODO: Check if both sets are equal and if there are variables that are not bound
-                // on both sides
-
-                unify(ctx.clone(), left_ty.clone(), right_ty);
-
-                left_ty
-            }
         }
     }
 }

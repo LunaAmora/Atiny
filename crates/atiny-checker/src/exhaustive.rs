@@ -149,12 +149,6 @@ impl Row {
             PatternKind::Atom(AtomKind::Identifier(n)) if ctx.lookup_cons(&n).is_none() => {
                 vec![self.pop_front()]
             }
-            PatternKind::Or(left, right) => {
-                let mut left = self.clone().preppend(*left).default_row(ctx);
-                let mut right = self.preppend(*right).default_row(ctx);
-                left.append(&mut right);
-                left
-            }
             PatternKind::Atom(AtomKind::Group(pat)) => {
                 self.pop_front().preppend(*pat).default_row(ctx)
             }
@@ -166,12 +160,6 @@ impl Row {
         match self.1[0].data.clone() {
             PatternKind::Atom(AtomKind::Identifier(n)) if ctx.lookup_cons(&n).is_none() => {
                 vec![self.inline(vec![wildcard(); size])]
-            }
-            PatternKind::Or(left, right) => {
-                let mut left = self.clone().preppend(*left).specialize_tuple(ctx, size);
-                let mut right = self.preppend(*right).specialize_tuple(ctx, size);
-                left.append(&mut right);
-                left
             }
             PatternKind::Atom(AtomKind::Group(pat)) => {
                 self.pop_front().preppend(*pat).specialize_tuple(ctx, size)
@@ -215,14 +203,6 @@ impl Row {
             // _ | _...._ pi2...pin
             PatternKind::Atom(AtomKind::Identifier(_)) => {
                 vec![self.inline(vec![wildcard(); constructor.args.len()])]
-            }
-            // (a | b) | specialize(c, | a pi2...pin |
-            //         |               | b pi2...pin | )
-            PatternKind::Or(left, right) => {
-                let mut left = self.clone().preppend(*left).specialize(ctx, constructor);
-                let mut right = self.preppend(*right).specialize(ctx, constructor);
-                left.append(&mut right);
-                left
             }
 
             PatternKind::Atom(AtomKind::Group(pat)) => {
@@ -676,7 +656,6 @@ impl Problem {
                     }
                 },
                 PatternKind::Constructor(name, args) => self.exhaustiveness_cons(ctx, &name, args),
-                PatternKind::Or(_, _) => todo!(),
             }
         }
     }
