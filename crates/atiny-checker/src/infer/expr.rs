@@ -74,7 +74,9 @@ impl Infer<'_> for Expr {
 
                 for c in clauses {
                     let mut set = HashSet::new();
+                    let pat_loc = c.pat.location;
                     let clause_pat = c.pat.infer((&mut ctx, &mut set));
+                    ctx = ctx.set_position(pat_loc);
                     unify(ctx.clone(), pat_ty.clone(), clause_pat);
                     unify(ctx.clone(), ret_ty.clone(), c.expr.infer(ctx.clone()));
                 }
