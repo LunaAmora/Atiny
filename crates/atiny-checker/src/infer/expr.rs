@@ -6,7 +6,6 @@ use crate::exhaustive::{CaseTree, Problem, Witness};
 use crate::{context::Ctx, types::*, unify::unify};
 
 use atiny_tree::r#abstract::*;
-use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};
 
 impl Infer<'_> for Expr {
@@ -70,7 +69,7 @@ impl Infer<'_> for Expr {
                 let pat_ty = e.infer(ctx.clone());
                 let ret_ty = ctx.new_hole();
 
-                let columns = clauses.iter().map(|x| x.pat.clone()).collect_vec();
+                let columns: Vec<_> = clauses.iter().map(|x| x.pat.clone()).collect();
 
                 for c in clauses {
                     let mut set = HashSet::new();
@@ -83,7 +82,24 @@ impl Infer<'_> for Expr {
 
                 // We can't do coverage checking / exhaustiveness checking without a well typed
                 // pattern match and with linear variables.
-                if ctx.err_count() == err_count {
+                if err_count == ctx.err_count() {
+                    if !columns.is_empty() {
+                        let mut new_columns = vec![columns[0].clone()];
+
+                        for column_pat in &columns[1..] {
+                            ctx = ctx.set_position(column_pat.location);
+                            let column = vec![column_pat.clone()];
+                            let problem = Problem::new(pat_ty.clone(), column, new_columns.clone());
+                            let witness = problem.exhaustiveness(&mut ctx);
+
+                            if !witness.is_non_exhaustive() {
+                                ctx.new_error(format!("the clause is useless: {}", column_pat));
+                            }
+
+                            new_columns.push(column_pat.clone());
+                        }
+                    }
+
                     let problem = Problem::new(pat_ty, vec![wildcard()], columns);
                     let witness = problem.exhaustiveness(&mut ctx);
 
