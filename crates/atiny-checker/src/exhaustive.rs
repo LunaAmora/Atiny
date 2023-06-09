@@ -140,7 +140,8 @@ impl Row {
     /// Splits a row into two rows. The first row contains the first `place` patterns and the second
     /// row contains the rest of the patterns.
     fn split_vec(mut self, place: usize) -> (Vec<Pattern>, Self) {
-        let vec = self.1.split_off(self.1.len() - place);
+        let mut vec = self.1.split_off(place);
+        std::mem::swap(&mut vec, &mut self.1);
         (vec, self)
     }
 
