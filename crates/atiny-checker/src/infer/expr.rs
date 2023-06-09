@@ -90,7 +90,7 @@ impl Infer<'_> for Expr {
                             ctx = ctx.set_position(column_pat.location);
                             let column = vec![column_pat.clone()];
                             let problem = Problem::new(pat_ty.clone(), column, new_columns.clone());
-                            let witness = problem.exhaustiveness(&mut ctx);
+                            let witness = problem.exhaustiveness(&ctx);
 
                             if !witness.is_non_exhaustive() {
                                 ctx.new_error(format!("the clause is useless: {}", column_pat));
@@ -101,7 +101,7 @@ impl Infer<'_> for Expr {
                     }
 
                     let problem = Problem::new(pat_ty, vec![wildcard()], columns);
-                    let witness = problem.exhaustiveness(&mut ctx);
+                    let witness = problem.exhaustiveness(&ctx);
 
                     let _ = report_exhaustiveness(witness).map_err(|err| {
                         ctx.new_error(format!("non-exhaustive pattern match: {}", err))

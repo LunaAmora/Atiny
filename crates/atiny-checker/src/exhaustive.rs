@@ -5,6 +5,8 @@
 use std::{
     collections::HashSet,
     fmt::{Display, Formatter},
+    iter,
+    rc::Rc,
 };
 
 use atiny_location::ByteRange;
@@ -54,36 +56,18 @@ pub enum Witness {
     NonExhaustive(Row),
 }
 
-/// Possible constructors used for specialization.
-pub enum Constructor<T, U> {
-    Defined(T),
-    Tuple(Vec<U>),
-    Int,
-    Bool,
-    Unit,
-}
-
 impl Witness {
     /// Creates a new witness that contains a new pattern based on the thing that got non exhausted.
-    pub fn expand(self, decl: &ConstructorSignature) -> Self {
-        if let Self::NonExhaustive(row) = self {
-            let (vec, row) = row.split_vec(decl.args.len());
-            let row = row.prepend(Pattern {
-                location: ByteRange::singleton(0),
-                data: PatternKind::Constructor(decl.name.clone(), vec),
-            });
-            Self::NonExhaustive(row)
-        } else {
-            self
-        }
-    }
-
-    pub fn expand_tuple(self, size: usize) -> Self {
+    pub fn expand(self, size: usize, constructor_name: Option<String>) -> Self {
         if let Self::NonExhaustive(row) = self {
             let (vec, row) = row.split_vec(size);
+            let data = match constructor_name {
+                Some(name) => PatternKind::Constructor(name, vec),
+                _ => PatternKind::Atom(AtomKind::Tuple(vec)),
+            };
             let row = row.prepend(Pattern {
                 location: ByteRange::singleton(0),
-                data: PatternKind::Atom(AtomKind::Tuple(vec)),
+                data,
             });
             Self::NonExhaustive(row)
         } else {
@@ -110,8 +94,6 @@ impl Witness {
 #[derive(Clone)]
 pub struct Row(Option<usize>, Vec<Pattern>);
 
-pub struct Column<'a>(Vec<&'a Pattern>);
-
 impl Row {
     /// Checks if a row is empty.
     fn is_empty(&self) -> bool {
@@ -120,7 +102,7 @@ impl Row {
 
     /// Adds a sequence of patterns to the beginning of a row and removes the first pattern of the
     /// row. It's used to "inline" a sequence of patterns into a row.
-    fn inline(mut self, vec: Vec<Pattern>) -> Self {
+    fn inline<I: IntoIterator<Item = Pattern>>(mut self, vec: I) -> Self {
         self.1 = vec.into_iter().chain(self.1.into_iter().skip(1)).collect();
         self
     }
@@ -133,7 +115,7 @@ impl Row {
 
     /// Prepends a pattern to a row.
     fn prepend(mut self, pat: Pattern) -> Self {
-        self.1 = vec![pat].into_iter().chain(self.1.into_iter()).collect();
+        self.1 = iter::once(pat).chain(self.1.into_iter()).collect();
         self
     }
 
@@ -152,55 +134,32 @@ impl Row {
         self.1.into_iter().next().unwrap()
     }
 
-    pub fn first_column(&self) -> Column<'_> {
-        Column(self.1.iter().collect())
-    }
+    pub fn specialize(self, ctx: &Ctx, case: Case<()>) -> Vec<Self> {
+        match (self.get_first_pattern(ctx), case) {
+            //default_row
+            (Case::Wildcard, Case::Wildcard) => vec![self.pop_front()],
 
-    /// Creates a "default_row" (removes everything from the beginning that does not matches "var")
-    /// and then returns the rest of the row.
-    pub fn default_row(self, ctx: &mut Ctx) -> Vec<Self> {
-        match self.1[0].data.clone() {
-            PatternKind::Atom(AtomKind::Identifier(n)) if ctx.lookup_cons(&n).is_none() => {
-                vec![self.pop_front()]
+            //specialize_constructor
+            (Case::Constructor(c1, args), Case::Constructor(c2, _)) if c1.name == c2.name => {
+                vec![self.inline(args)]
             }
-            PatternKind::Atom(AtomKind::Group(pat)) => {
-                self.pop_front().prepend(*pat).default_row(ctx)
+            (Case::Wildcard, Case::Constructor(constr, _)) => {
+                vec![self.inline(vec![wildcard(); constr.args.len()])]
             }
+
+            //specialize_tuple
+            (Case::Tuple(p), Case::Tuple(t)) if p.len() == t.len() => vec![self.inline(p)],
+            (Case::Wildcard, Case::Tuple(t)) => vec![self.inline(vec![wildcard(); t.len()])],
+
+            //specialize_number
+            (Case::Int(n1), Case::Int(n2)) if n1 == n2 => vec![self.pop_front()],
+            (Case::Wildcard, Case::Int(_)) => vec![self.pop_front()],
+
             _ => vec![],
         }
     }
 
-    pub fn specialize_tuple(self, ctx: &mut Ctx, size: usize) -> Vec<Self> {
-        match self.1[0].data.clone() {
-            PatternKind::Atom(AtomKind::Identifier(n)) if ctx.lookup_cons(&n).is_none() => {
-                vec![self.inline(vec![wildcard(); size])]
-            }
-            PatternKind::Atom(AtomKind::Group(pat)) => {
-                self.pop_front().prepend(*pat).specialize_tuple(ctx, size)
-            }
-            PatternKind::Atom(AtomKind::Tuple(pats)) if pats.len() == size => {
-                vec![self.inline(pats)]
-            }
-            _ => vec![],
-        }
-    }
-
-    pub fn specialize_number(self, ctx: &mut Ctx, n: u64) -> Vec<Self> {
-        match self.1[0].data.clone() {
-            PatternKind::Atom(AtomKind::Identifier(n)) if ctx.lookup_cons(&n).is_none() => {
-                vec![self.pop_front()]
-            }
-            PatternKind::Atom(AtomKind::Group(pat)) => {
-                self.pop_front().prepend(*pat).specialize_number(ctx, n)
-            }
-            PatternKind::Atom(AtomKind::Number(number)) if number == n => {
-                vec![self.pop_front()]
-            }
-            _ => vec![],
-        }
-    }
-
-    pub fn is_all_wildcards(&self, ctx: &mut Ctx) -> bool {
+    pub fn is_all_wildcards(&self, ctx: &Ctx) -> bool {
         self.1.iter().all(|pat| {
             matches!(
             &pat.data,
@@ -209,43 +168,12 @@ impl Row {
         })
     }
 
-    /// Specializes a row for a certain constructor. It does this by checking if the first pattern
-    /// matches the constructor and then flattening the rest of the patterns into the row.
-    pub fn specialize(self, ctx: &mut Ctx, constructor: &ConstructorSignature) -> Vec<Self> {
-        match self.1[0].data.clone() {
-            // c(r1, ...., ra)  | r1...ra pi2...pin
-            PatternKind::Constructor(name, args) if name == constructor.name => {
-                vec![self.inline(args)]
-            }
-
-            PatternKind::Atom(AtomKind::Identifier(name)) if ctx.lookup_cons(&name).is_some() => {
-                if name == constructor.name {
-                    // c | pi2...pin
-                    vec![self.pop_front()]
-                } else {
-                    // c' | No Row
-                    vec![]
-                }
-            }
-            // c'(r1, ...., ra) | No Row
-            PatternKind::Constructor(_, _) => {
-                vec![]
-            }
-            // _ | _...._ pi2...pin
-            PatternKind::Atom(AtomKind::Identifier(_)) => {
-                vec![self.inline(vec![wildcard(); constructor.args.len()])]
-            }
-
-            PatternKind::Atom(AtomKind::Group(pat)) => {
-                self.pop_front().prepend(*pat).specialize(ctx, constructor)
-            }
-
-            _ => vec![],
-        }
-    }
-
     fn first(&self) -> &Pattern {
         self.1.first().unwrap()
+    }
+
+    fn get_first_pattern(&self, ctx: &Ctx) -> Case<Pattern> {
+        Case::from_pattern(ctx, self.first().data.clone())
     }
 }
 
@@ -276,7 +204,7 @@ impl Matrix {
     }
 
     /// Checks if the first pattern is a wildcard or a variable so it can determine the set complete.
-    pub fn is_wildcard(&self, ctx: &mut Ctx) -> bool {
+    pub fn is_wildcard(&self, ctx: &Ctx) -> bool {
         self.0.iter().all(|row| {
             matches!(
             &row.1[0].data,
@@ -287,7 +215,7 @@ impl Matrix {
 
     /// Gets the used constructor of a pattern. This is done by checking if the pattern is a
     /// constructor on the context.
-    fn get_used_constructor(ctx: &mut Ctx, pat: &PatternKind) -> Option<String> {
+    fn get_used_constructor(ctx: &Ctx, pat: &PatternKind) -> Option<String> {
         match pat {
             PatternKind::Atom(AtomKind::Identifier(id)) if ctx.lookup_cons(id).is_some() => {
                 Some(id.clone())
@@ -300,25 +228,14 @@ impl Matrix {
 
     /// Gets the used constructors of a matrix. This is done by getting the used constructors of
     /// each of the rows.
-    fn get_used_constructors(&self, ctx: &mut Ctx) -> Vec<String> {
+    fn get_used_constructors(&self, ctx: &Ctx) -> Vec<String> {
         self.0
             .iter()
             .flat_map(|row| Self::get_used_constructor(ctx, &row.first().data))
             .collect()
     }
 
-    /// It creates a default matrix by creating a default row for each row in the matrix. This is
-    /// done by removing everything from the beginning that does not match a variable or a wildcard.
-    pub fn default_matrix(self, ctx: &mut Ctx) -> Self {
-        Self(
-            self.0
-                .into_iter()
-                .flat_map(|row| row.default_row(ctx))
-                .collect(),
-        )
-    }
-
-    pub fn is_complete_type_sig(&self, ctx: &mut Ctx, type_sig: &TypeSignature) -> Completeness {
+    pub fn is_complete_type_sig(&self, ctx: &Ctx, type_sig: &TypeSignature) -> Completeness {
         let names = type_sig.get_constructors();
 
         names.map_or(Completeness::Incomplete(Finitude::Infinite), |names| {
@@ -329,7 +246,7 @@ impl Matrix {
                 .collect::<HashSet<_>>();
 
             if used_constructors.len() == names.len() || self.is_wildcard(ctx) {
-                Completeness::Complete(used_constructors.into_iter().collect_vec())
+                Completeness::Complete(used_constructors.into_iter().collect())
             } else {
                 Completeness::Incomplete(Finitude::Finite(
                     names.difference(&used_constructors).cloned().collect(),
@@ -340,39 +257,23 @@ impl Matrix {
 
     /// If removes all the rows that are after a row that is completely made out of wildcards or
     /// variables. It is just an optimization.
-    pub fn filter_first_match(&mut self, ctx: &mut Ctx) {
+    pub fn filter_first_match(&mut self, ctx: &Ctx) {
         let index = self.0.iter().find_position(|row| row.is_all_wildcards(ctx));
         if let Some((index, _)) = index {
             self.0.truncate(index + 1);
         }
     }
 
-    pub fn specialize_by<A, F>(self, ctx: &mut Ctx, f: F, arg: A) -> Self
-    where
-        A: Copy,
-        F: Fn(Row, &mut Ctx, A) -> Vec<Row>,
-    {
+    /// Creates a new matrix where all the rows are specialized by a [`Case`]. This is done by
+    /// checking if each row matches a [`Case`] in the first pattern and then flattening all
+    /// the patterns into the row or removing it if it does not matches.
+    pub fn specialize(self, ctx: &Ctx, case: Case<()>) -> Self {
         Self(
             self.0
                 .into_iter()
-                .flat_map(|row| f(row, ctx, arg))
+                .flat_map(|row| row.specialize(ctx, case.clone()))
                 .collect(),
         )
-    }
-
-    /// Creates a new matrix where all the rows are specialized by a constructor. This is done by
-    /// checking if each row matches a constructor in the first pattern and then flattening all
-    /// the patterns into the row or removing it if it does not matches.
-    pub fn specialize(self, ctx: &mut Ctx, constructor: &ConstructorSignature) -> Self {
-        self.specialize_by(ctx, Row::specialize, constructor)
-    }
-
-    pub fn specialize_tuple(self, ctx: &mut Ctx, size: usize) -> Self {
-        self.specialize_by(ctx, Row::specialize_tuple, size)
-    }
-
-    pub fn specialize_number(self, ctx: &mut Ctx, n: u64) -> Self {
-        self.specialize_by(ctx, Row::specialize_number, n)
     }
 }
 
@@ -441,29 +342,23 @@ impl Problem {
     /// Specializes into a new problem. This is done by instantiating the type of the problem with
     /// the type arguments and then flattening the rest of the type arguments into the type of the
     /// problem and specializing each of the rows with a constructor.
-    fn specialize(
+    fn specialize_cons(
         self,
-        ctx: &mut Ctx,
+        ctx: &Ctx,
         type_args: &[Type],
-        constructor: &ConstructorSignature,
-        case: Vec<Pattern>,
-    ) -> Self {
+        constructor: Rc<ConstructorSignature>,
+        pat: Vec<Pattern>,
+    ) -> Witness {
         let generalized = constructor.typ.instantiate_with(type_args);
-
-        Self {
-            typ: generalized
-                .iter()
-                .chain(self.typ.iter().skip(1).cloned())
-                .collect(),
-            case: self.case.inline(case),
-            matrix: self.matrix.specialize(&mut ctx.clone(), constructor),
-        }
+        let arg_count = constructor.args.len();
+        let case = Case::Constructor(constructor, vec![(); arg_count]);
+        self.specialize(ctx, generalized.iter(), pat, case)
     }
 
     /// Splits a problem into multiple by looking at the type of the problem and the name of the
     /// type and then looking at all the constructors of the type and getting a result of each of
     /// them.
-    fn split_on_defined_cons(self, ctx: &mut Ctx, name: &str, type_args: &[Type]) -> Witness {
+    fn split_on_defined_cons(self, ctx: &Ctx, name: &str, type_args: &[Type]) -> Witness {
         let type_sig = ctx
             .lookup_type(name)
             .unwrap_or_else(|| panic!("cannot find type '{name}'"));
@@ -473,19 +368,20 @@ impl Problem {
                 let mut nodes = Vec::new();
 
                 for constructor in sum {
-                    let problem = self.clone().specialize(
+                    let len = constructor.args.len();
+                    let witness = self.clone().specialize_cons(
                         ctx,
                         type_args,
-                        &constructor,
-                        vec![wildcard(); constructor.args.len()],
+                        constructor.clone(),
+                        vec![wildcard(); len],
                     );
 
-                    let witness = problem.exhaustiveness(ctx);
+                    let name = &constructor.name;
 
                     if witness.is_non_exhaustive() {
-                        return witness.expand(&constructor);
+                        return witness.expand(len, Some(name.clone()));
                     } else if let Witness::Ok(tree) = witness {
-                        nodes.push((constructor.name.clone(), tree));
+                        nodes.push((name.clone(), tree));
                     }
                 }
 
@@ -500,31 +396,21 @@ impl Problem {
 
     /// Returns the first type of the problem.
     fn current_type(&self) -> Type {
-        self.typ.first().cloned().unwrap()
-    }
-
-    /// Returns the type signature of the first type of the problem.
-    fn current_type_signature(&self, ctx: &mut Ctx) -> Option<TypeSignature> {
-        let ty = self.current_type();
-        match &*ty.flatten() {
-            MonoType::Application(n, _) => ctx.lookup_type(n).cloned(),
-            MonoType::Var(n) => ctx.lookup_type(n).cloned(),
-            _ => None,
-        }
+        self.typ.first().cloned().unwrap().flatten()
     }
 
     /// Creates a new problem where the first type is removed and the case is updated to match the
     /// first type. It's used when we need to specialize the tree to an identifier
-    fn default_matrix(self, ctx: &mut Ctx) -> Self {
+    fn default_matrix(self, ctx: &Ctx) -> Self {
         Self {
             typ: self.typ[1..].to_vec(),
             case: self.case.pop_front(),
-            matrix: self.matrix.default_matrix(ctx),
+            matrix: self.matrix.specialize(ctx, Case::Wildcard),
         }
     }
 
     /// Generates a constructor pattern for the given constructor name.
-    fn synthesize_constructor(&self, ctx: &mut Ctx, name: &str) -> Pattern {
+    fn synthesize_constructor(&self, ctx: &Ctx, name: &str) -> Pattern {
         let cons_sig = ctx.lookup_cons(name).unwrap();
 
         let args = vec![wildcard(); cons_sig.args.len()];
@@ -536,23 +422,20 @@ impl Problem {
     }
 
     /// Checks if all the rows are wildcard.
-    fn is_all_wildcard(&self, ctx: &mut Ctx) -> bool {
+    fn is_all_wildcard(&self, ctx: &Ctx) -> bool {
         self.matrix.is_wildcard(ctx)
     }
 
     /// Checks if the problem is exhaustive for a wildcard. This is done by checking if the matrix
     /// is complete for the current type (it means that it contains all of the constructors as
     /// wildcards)
-    fn exhaustiveness_wildcard(self, ctx: &mut Ctx) -> Witness {
-        // TODO: Check if this case is actually true, I mean, if there's not type signature that we
-        // can use then we can just return the default matrix and add an incompleteness and that is
-        // probably the best thing to do.
-        let Some(cur_ty) = self.current_type_signature(ctx) else {
-            return self.specialize_wildcard(ctx);
-        };
-
-        let result = self.matrix.is_complete_type_sig(ctx, &cur_ty);
-
+    fn exhaustiveness_wildcard(
+        self,
+        ctx: &Ctx,
+        name: &str,
+        type_args: &[Type],
+        current_typ: TypeSignature,
+    ) -> Witness {
         // If the first column is wildcard, then we can just return the [Problem::default_matrix]
         // that specializes the tree for identifiers removing all constructor rows.
         if self.is_all_wildcard(ctx) {
@@ -560,10 +443,10 @@ impl Problem {
         } else {
             // If it's not all wildcard, then we need to check if the matrix is complete for the
             // current type. If it is, then we need to split the problem into multiple problems.
-            match result {
+            match self.matrix.is_complete_type_sig(ctx, &current_typ) {
                 // If it's complete then we split for all of the possible constructors. It's done
                 // to ensure that all of the possible matrices are checked.
-                Completeness::Complete(_) => self.exhaustiveness_wildcard_split(ctx),
+                Completeness::Complete(_) => self.split_on_defined_cons(ctx, name, type_args),
                 // If it's incomplete and infinite, then we can just return the default_matrix with
                 // a wildcard that represents all of the missing constructors.
                 Completeness::Incomplete(Finitude::Infinite) => self.specialize_wildcard(ctx),
@@ -579,81 +462,26 @@ impl Problem {
         }
     }
 
-    fn specialize_wildcard(self, ctx: &mut Ctx) -> Witness {
+    fn specialize_wildcard(self, ctx: &Ctx) -> Witness {
         let witness = self.default_matrix(ctx).exhaustiveness(ctx);
         witness.add_pattern(wildcard())
     }
 
-    fn exhaustiveness_wildcard_split(self, ctx: &mut Ctx) -> Witness {
-        match &*self.current_type().flatten() {
-            MonoType::Application(name, type_args) => {
-                self.split_on_defined_cons(ctx, name, type_args)
-            }
-            _ => unreachable!(
-                "No complete signature allows an type that is different than application"
-            ),
-        }
-    }
-
-    fn exhaustiveness_wildcard_tuple(self, ctx: &mut Ctx, tuple: &[Type]) -> Witness {
-        let size = tuple.len();
-        let specialized = self.specialize_tuple(ctx, tuple, vec![wildcard(); size]);
-        let witness = specialized.exhaustiveness(ctx);
-
-        if witness.is_non_exhaustive() {
-            witness.expand_tuple(size)
-        } else {
-            witness
-        }
-    }
-
-    /// Specializes using a constructor and a set of patterns of this constructor.
-    fn exhaustiveness_cons(self, ctx: &mut Ctx, n: &str, p: Vec<Pattern>) -> Witness {
-        match &*self.current_type().flatten() {
-            MonoType::Application(_, type_args) => {
-                let cons_sig = ctx.lookup_cons(n).unwrap();
-                let specialized = self.specialize(ctx, type_args, &cons_sig, p);
-                specialized.exhaustiveness(ctx)
-            }
-            _ => unreachable!(
-                "No complete signature allows an type that is different than application"
-            ),
-        }
-    }
-
-    fn exhaustiveness_number(self, ctx: &mut Ctx, n: u64) -> Witness {
-        let specialized = self.specialize_number(ctx, n);
-        specialized.exhaustiveness(ctx)
-    }
-
-    fn specialize_number(self, ctx: &mut Ctx, n: u64) -> Self {
-        Self {
-            typ: self.typ.iter().skip(1).cloned().collect(),
-            case: self.case.pop_front(),
-            matrix: self.matrix.specialize_number(ctx, n),
-        }
-    }
-
-    fn exhaustiveness_tuple(self, ctx: &mut Ctx, p: Vec<Pattern>) -> Witness {
-        match &*self.current_type().flatten() {
-            MonoType::Tuple(tuple) => {
-                let specialized = self.specialize_tuple(ctx, tuple, p);
-                specialized.exhaustiveness(ctx)
-            }
-            _ => unreachable!("No complete tuple allows an type that is different from tuple"),
-        }
-    }
-
-    fn specialize_tuple(self, ctx: &mut Ctx, types: &[Type], case: Vec<Pattern>) -> Self {
-        Self {
+    fn specialize<T, P>(self, ctx: &Ctx, types: T, pat: P, case: Case<()>) -> Witness
+    where
+        T: IntoIterator<Item = Type>,
+        P: IntoIterator<Item = Pattern>,
+    {
+        let specialized = Self {
             typ: types
-                .iter()
-                .cloned()
+                .into_iter()
                 .chain(self.typ.iter().skip(1).cloned())
                 .collect(),
-            case: self.case.inline(case),
-            matrix: self.matrix.specialize_tuple(ctx, types.len()),
-        }
+            case: self.case.inline(pat),
+            matrix: self.matrix.specialize(ctx, case),
+        };
+
+        specialized.exhaustiveness(ctx)
     }
 
     /// Checks if the problem is exhaustive on a case. This is the "entrypoint" forall of the
@@ -731,7 +559,7 @@ impl Problem {
     /// it's going to force the type to be specialized. In this case, the case is `_` that means
     /// that we need to check if the type is complete for the `_` case using the function
     /// [Problem::exhaustiveness_wildcard].
-    pub fn exhaustiveness(mut self, ctx: &mut Ctx) -> Witness {
+    pub fn exhaustiveness(self, ctx: &Ctx) -> Witness {
         // It's non exhaustive if the current problem is empty (it means that there are no rows that
         // matches the case)
         if self.is_empty() {
@@ -740,26 +568,78 @@ impl Problem {
             Witness::Ok(CaseTree::Leaf(row))
         } else {
             // The first pattern of the case will guide the specialization of the whole problem.
-            match self.case.first().clone().data {
-                PatternKind::Atom(atom) => match atom {
-                    AtomKind::Identifier(n) if ctx.lookup_cons(&n).is_none() => {
-                        match &*self.current_type().flatten() {
-                            MonoType::Tuple(tuple) => {
-                                self.exhaustiveness_wildcard_tuple(ctx, tuple)
-                            }
-                            _ => self.exhaustiveness_wildcard(ctx),
-                        }
-                    }
-                    AtomKind::Identifier(name) => self.exhaustiveness_cons(ctx, &name, vec![]),
-                    AtomKind::Number(n) => self.exhaustiveness_number(ctx, n),
-                    AtomKind::Tuple(tuple) => self.exhaustiveness_tuple(ctx, tuple),
-                    AtomKind::Group(x) => {
-                        self.case.1[0] = *x;
-                        self.exhaustiveness(ctx)
-                    }
-                },
-                PatternKind::Constructor(name, args) => self.exhaustiveness_cons(ctx, &name, args),
+            let pat = self.case.first().clone().data;
+            self.match_exhaustiveness(ctx, Case::from_pattern(ctx, pat))
+        }
+    }
+
+    pub fn match_exhaustiveness(self, ctx: &Ctx, case: Case<Pattern>) -> Witness {
+        match (case, &*self.current_type()) {
+            (Case::Wildcard, MonoType::Application(n, args)) => match ctx.lookup_type(n) {
+                Some(sig) => self.exhaustiveness_wildcard(ctx, n, args, sig.clone()),
+                None => self.specialize_wildcard(ctx),
+            },
+
+            (Case::Wildcard, MonoType::Tuple(types)) => {
+                let len = types.len();
+                let witness = self.specialize(
+                    ctx,
+                    types.clone(),
+                    vec![wildcard(); len],
+                    Case::Tuple(vec![(); len]),
+                );
+
+                if witness.is_non_exhaustive() {
+                    witness.expand(len, None)
+                } else {
+                    witness
+                }
             }
+
+            (Case::Wildcard, _) => self.specialize_wildcard(ctx),
+
+            (Case::Constructor(cons, pat), MonoType::Application(_, args)) => {
+                self.specialize_cons(ctx, args, cons, pat)
+            }
+
+            (Case::Tuple(pat), MonoType::Tuple(types)) => {
+                self.specialize(ctx, types.clone(), pat, Case::Tuple(vec![(); types.len()]))
+            }
+
+            (Case::Int(n), _) => self.specialize(ctx, iter::empty(), iter::empty(), Case::Int(n)),
+
+            _ => unimplemented!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Case<T: Clone> {
+    Constructor(Rc<ConstructorSignature>, Vec<T>),
+    Tuple(Vec<T>),
+    Int(u64),
+    Wildcard,
+}
+
+impl Case<Pattern> {
+    fn from_pattern(ctx: &Ctx, pat: PatternKind) -> Self {
+        match pat {
+            PatternKind::Atom(atom) => Self::from_atom(ctx, atom),
+            PatternKind::Constructor(name, args) => {
+                let cons = ctx.lookup_cons(&name).unwrap();
+                Self::Constructor(cons, args)
+            }
+        }
+    }
+
+    fn from_atom(ctx: &Ctx, atom: AtomKind<Pattern>) -> Self {
+        match atom {
+            AtomKind::Identifier(name) => ctx
+                .lookup_cons(&name)
+                .map_or_else(|| Self::Wildcard, |cons| Self::Constructor(cons, vec![])),
+            AtomKind::Number(number) => Self::Int(number),
+            AtomKind::Tuple(tuple) => Self::Tuple(tuple),
+            AtomKind::Group(g) => Self::from_pattern(ctx, g.data),
         }
     }
 }
