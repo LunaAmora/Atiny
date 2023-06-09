@@ -43,7 +43,7 @@ impl<'a> Iterator for TopIter<'a> {
 }
 
 impl Ctx {
-    pub fn add_top_level_types(&mut self, top_levels: Vec<TopLevel>) {
+    pub fn add_top_level_types(&mut self, top_levels: Vec<TopLevel>) -> &mut Self {
         let mut fn_vec = Vec::new();
         let top_iter = TopIter::new(top_levels, &mut fn_vec);
 
@@ -65,6 +65,8 @@ impl Ctx {
         for (fun, body) in bodies {
             self.check_fn_body(fun, body);
         }
+
+        self
     }
 
     fn add_type_decl(&mut self, type_decl: TypeDecl) -> (String, Vec<Constructor>) {

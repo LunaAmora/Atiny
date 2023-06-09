@@ -1,0 +1,5 @@
+
+[error]: type mismatch between 'Bool' and '(List Bool)' at 5:26~5:30
+
+  5 |         Cons true (Cons _ true) => 2,
+    |                           ^^^^

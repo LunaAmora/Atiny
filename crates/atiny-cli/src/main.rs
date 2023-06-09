@@ -55,10 +55,8 @@ fn main() {
     ProgramParser::new()
         .parse(code)
         .map_err(|x| vec![from_lalrpop(x)])
-        .and_then(|x| {
-            ctx.add_top_level_types(x);
-            ctx.take_errors().map_or_else(|| Ok(()), Err)
-        })
+        .map(|parsed| ctx.add_top_level_types(parsed).take_errors())
+        .and_then(|errs| errs.map_or_else(|| Ok(()), Err))
         .unwrap_or_else(|errs| {
             for err in errs {
                 eprintln!("{}", err.with_code(code));

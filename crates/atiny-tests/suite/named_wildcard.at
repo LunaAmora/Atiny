@@ -1,0 +1,5 @@
+fn id (x: Int): Int {
+    match x {
+        a => a,
+    }
+}

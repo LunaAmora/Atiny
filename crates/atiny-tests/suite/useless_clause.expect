@@ -1,0 +1,10 @@
+
+[error]: the clause is useless: (1, true) at 5:8~5:17
+
+  5 |         (1, true)  => 2,
+    |         ^^^^^^^^^
+
+[error]: non-exhaustive pattern match: (_, false) at 6:8~6:17
+
+  6 |         (_, true)  => 3,
+    |         ^^^^^^^^^

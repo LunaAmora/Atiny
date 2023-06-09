@@ -1,0 +1,5 @@
+
+[error]: non-exhaustive pattern match: (Cons (true, false) Nil) at 8:8~8:11
+
+  8 |         Nil                         => 4,
+    |         ^^^
