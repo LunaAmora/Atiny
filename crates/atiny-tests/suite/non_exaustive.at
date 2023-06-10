@@ -1,0 +1,11 @@
+type List t = | Cons t (List t) | Nil
+type Bool = | true | false
+
+fn ata : Int {
+    match Nil {
+        Cons (_, true)  _           => 1,
+        Cons (false, _) _           => 2,
+        Cons _          (Cons _ _)  => 3,
+        Nil                         => 4,
+    }
+}

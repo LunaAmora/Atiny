@@ -5,7 +5,7 @@ use std::{fmt::Display, rc::Rc};
 
 use crate::{
     context::Ctx,
-    types::{Hole, MonoType, Ref},
+    types::{Hole, MonoType, Ref, Type},
 };
 
 #[derive(Debug)]
@@ -14,6 +14,14 @@ pub struct OccursCheck;
 impl Display for OccursCheck {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "found cyclic type of infinite size")
+    }
+}
+
+pub struct TypeMismatch(Type, Type);
+
+impl Display for TypeMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "type mismatch between '{}' and '{}'", self.0, self.1)
     }
 }
 
@@ -61,7 +69,7 @@ pub fn unify(ctx: Ctx, left: Rc<MonoType>, right: Rc<MonoType>) {
 
         (MonoType::Error, _) | (_, MonoType::Error) => {}
 
-        (l, r) => ctx.error(format!("type mismatch between '{}' and '{}'", l, r)),
+        _ => ctx.dyn_error(TypeMismatch(left, right)),
     }
 }
 

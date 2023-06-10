@@ -1,5 +1,4 @@
-use itertools::Itertools;
-use std::{collections::HashSet, iter, rc::Rc};
+use std::{collections::HashSet, rc::Rc};
 
 use atiny_tree::r#abstract::{
     Constructor, Expr, FnDecl, TopLevel, TopLevelKind, TypeDecl, TypeKind, TypeNode,
@@ -8,7 +7,8 @@ use atiny_tree::r#abstract::{
 use crate::{
     context::Ctx,
     types::{
-        ConstructorSignature, DeclSignature, FunctionSignature, MonoType, TypeScheme, TypeSignature,
+        ConstructorSignature, DeclSignature, FunctionSignature, MonoType, TypeScheme,
+        TypeSignature, TypeValue,
     },
 };
 
@@ -43,7 +43,7 @@ impl<'a> Iterator for TopIter<'a> {
 }
 
 impl Ctx {
-    pub fn add_top_level_types(&mut self, top_levels: Vec<TopLevel>) {
+    pub fn add_top_level_types(&mut self, top_levels: Vec<TopLevel>) -> &mut Self {
         let mut fn_vec = Vec::new();
         let top_iter = TopIter::new(top_levels, &mut fn_vec);
 
@@ -65,13 +65,15 @@ impl Ctx {
         for (fun, body) in bodies {
             self.check_fn_body(fun, body);
         }
+
+        self
     }
 
     fn add_type_decl(&mut self, type_decl: TypeDecl) -> (String, Vec<Constructor>) {
         let type_sig = TypeSignature {
             name: type_decl.name.clone(),
             params: type_decl.params.clone(),
-            constructors: Vec::new(),
+            value: TypeValue::Sum(Vec::new()),
         };
 
         self.signatures
@@ -97,12 +99,7 @@ impl Ctx {
             .map(|t| t.infer(ctx.clone()))
             .collect();
 
-        let constructor_type = args
-            .iter()
-            .cloned()
-            .chain(iter::once(application))
-            .reduce(MonoType::arrow)
-            .unwrap();
+        let constructor_type = MonoType::rfold_arrow(args.iter().cloned(), application);
 
         let value = Rc::new(ConstructorSignature::new(
             constr.name.clone(),
@@ -111,7 +108,12 @@ impl Ctx {
             args,
         ));
 
-        sig.constructors.push(value.clone());
+        match &mut sig.value {
+            TypeValue::Sum(ref mut sum) => {
+                sum.push(value.clone());
+            }
+            TypeValue::Opaque => {}
+        }
 
         self.signatures
             .values
@@ -138,11 +140,8 @@ impl Ctx {
 
         let type_variables: Vec<String> = set.into_iter().collect();
 
-        let entire_type = make_function_type(
-            type_variables.clone(),
-            &args.iter().map(|x| x.1.clone()).collect_vec(),
-            ret.clone(),
-        );
+        let arrow = MonoType::rfold_arrow(args.iter().map(|(_, ty)| ty.clone()), ret.clone());
+        let entire_type = TypeScheme::new(type_variables.clone(), arrow);
 
         let sig = DeclSignature::Function(FunctionSignature {
             name: fn_decl.name.clone(),
@@ -184,7 +183,6 @@ impl Ctx {
                     self.free_variables(arg, set);
                 }
             }
-            TypeKind::Unit => {}
         }
     }
 
@@ -202,21 +200,4 @@ impl Ctx {
 
         body.check(ctx, sig.ret.clone());
     }
-}
-
-fn make_function_type(
-    type_variables: Vec<String>,
-    args: &[Rc<MonoType>],
-    ret: Rc<MonoType>,
-) -> Rc<TypeScheme> {
-    let entire_type = Rc::new(TypeScheme {
-        names: type_variables,
-        mono: args
-            .iter()
-            .cloned()
-            .chain(iter::once(ret))
-            .reduce(MonoType::arrow)
-            .unwrap(),
-    });
-    entire_type
 }

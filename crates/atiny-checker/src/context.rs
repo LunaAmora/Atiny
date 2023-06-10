@@ -7,9 +7,7 @@ use atiny_error::Error;
 use atiny_location::ByteRange;
 use itertools::Itertools;
 
-use crate::types::{ConstructorSignature, DeclSignature, TypeSignature};
-
-use super::types::{MonoType, TypeScheme};
+use super::types::*;
 
 #[derive(Clone, Default, Debug)]
 pub struct Signatures {
@@ -106,7 +104,7 @@ impl Ctx {
         })
     }
 
-    pub fn lookup_constructor(&self, name: &str) -> Option<Rc<ConstructorSignature>> {
+    pub fn lookup_cons(&self, name: &str) -> Option<Rc<ConstructorSignature>> {
         self.signatures
             .values
             .get(name)
@@ -116,15 +114,30 @@ impl Ctx {
             })
     }
 
+    pub fn lookup_type(&self, name: &str) -> Option<&TypeSignature> {
+        self.signatures.types.get(name)
+    }
+
     pub fn error(&self, msg: String) {
         self.errors
             .borrow_mut()
             .push(Error::new(msg, self.location));
     }
 
-    pub fn get_errors(&self) -> Option<std::cell::Ref<'_, Vec<Error>>> {
-        let errors = self.errors.borrow();
-        (!errors.is_empty()).then_some(errors)
+    pub fn dyn_error(&self, msg: impl Display + 'static) {
+        self.errors
+            .borrow_mut()
+            .push(Error::new_dyn(msg, self.location));
+    }
+
+    pub fn take_errors(&self) -> Option<Vec<Error>> {
+        let is_not_empty = { !self.errors.borrow().is_empty() };
+
+        is_not_empty.then_some({
+            let mut result = vec![];
+            result.append(&mut self.errors.borrow_mut());
+            result
+        })
     }
 
     pub fn err_count(&self) -> usize {
