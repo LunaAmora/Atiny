@@ -51,9 +51,9 @@ impl Ctx {
     }
 
     /// Extends a context with a list of type names (for type variables).
-    pub fn extend_types(&self, names: &[String]) -> Self {
+    pub fn extend_types<'a, N: IntoIterator<Item = &'a String>>(&self, names: N) -> Self {
         Self {
-            typ_map: self.typ_map.clone().union(names.iter().cloned().collect()),
+            typ_map: self.typ_map.clone().union(names.into_iter().collect()),
             ..self.clone()
         }
     }

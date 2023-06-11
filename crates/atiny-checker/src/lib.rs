@@ -2,7 +2,6 @@
 //! hindley-milner type system extended with type classes and linear types.
 
 pub mod context;
-pub mod top_level;
 pub mod types;
 pub mod unify;
 

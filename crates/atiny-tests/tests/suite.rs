@@ -51,7 +51,7 @@ mk_test! { "/suite/", |code| {
     ProgramParser::new()
         .parse(&code)
         .map_err(|x| vec![from_lalrpop(x)])
-        .map(|parsed| ctx.add_top_level_types(parsed).take_errors())
+        .map(|parsed| parsed.infer(&mut ctx).take_errors())
         .and_then(|errs| errs.map_or_else(|| Ok(String::new()), Err))
         .unwrap_or_else(|errs| {
             errs.into_iter().map(|x| x.with_code(&code).to_string()).collect()

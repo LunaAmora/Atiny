@@ -10,8 +10,9 @@ use std::{collections::HashSet, rc::Rc};
 
 impl Infer<'_> for Expr {
     type Context = Ctx;
+    type Return = Type;
 
-    fn infer(self, mut ctx: Self::Context) -> Type {
+    fn infer(self, mut ctx: Self::Context) -> Self::Return {
         use AtomKind::*;
         use ExprKind::*;
         ctx = ctx.set_position(self.location);

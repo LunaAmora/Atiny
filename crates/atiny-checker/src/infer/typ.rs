@@ -8,8 +8,9 @@ use std::rc::Rc;
 
 impl Infer<'_> for TypeNode {
     type Context = Ctx;
+    type Return = Type;
 
-    fn infer(self, ctx: Self::Context) -> Type {
+    fn infer(self, ctx: Self::Context) -> Self::Return {
         let ctx = ctx.set_position(self.location);
 
         match self.data {

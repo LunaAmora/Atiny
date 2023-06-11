@@ -2,6 +2,7 @@ use std::process::exit;
 
 use atiny_checker::{
     context::Ctx,
+    infer::Infer,
     types::{MonoType, TypeSignature, TypeValue},
 };
 use atiny_parser::{error::from_lalrpop, ProgramParser};
@@ -55,7 +56,7 @@ fn main() {
     ProgramParser::new()
         .parse(code)
         .map_err(|x| vec![from_lalrpop(x)])
-        .map(|parsed| ctx.add_top_level_types(parsed).take_errors())
+        .map(|parsed| parsed.infer(&mut ctx).take_errors())
         .and_then(|errs| errs.map_or_else(|| Ok(()), Err))
         .unwrap_or_else(|errs| {
             for err in errs {
