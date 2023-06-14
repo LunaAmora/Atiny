@@ -199,6 +199,13 @@ impl MonoType {
         }
     }
 
+    pub fn flatten_back(self: Type) -> Type {
+        match &*self.clone().flatten() {
+            Self::Arrow(_, end) => end.clone().flatten_back(),
+            _ => self,
+        }
+    }
+
     pub fn rfold_arrow<I: DoubleEndedIterator<Item = Type>>(iter: I, end: Type) -> Type {
         iter.rfold(end, |x, y| Self::arrow(y, x))
     }
@@ -343,8 +350,8 @@ impl ConstructorSignature {
     pub fn new(name: String, names: Vec<String>, mono: Type, args: Vec<Type>) -> Self {
         Self {
             name,
-            typ: TypeScheme { names, mono }.into(),
             args,
+            typ: TypeScheme { names, mono }.into(),
         }
     }
 }
@@ -353,9 +360,17 @@ impl ConstructorSignature {
 pub struct FunctionSignature {
     pub name: String,
     pub args: Vec<(String, Type)>,
-    pub ret: Type,
     pub entire_type: Rc<TypeScheme>,
-    pub type_variables: Vec<String>,
+}
+
+impl FunctionSignature {
+    pub fn type_variables(&self) -> &[String] {
+        &self.entire_type.names
+    }
+
+    pub fn return_type(&self) -> Type {
+        self.entire_type.mono.clone().flatten_back()
+    }
 }
 
 impl Display for FunctionSignature {
@@ -366,7 +381,7 @@ impl Display for FunctionSignature {
             .map(|(n, t)| format!("({} : {})", n, t))
             .join(" ");
 
-        write!(f, "(fn {} {} : {})", self.name, params, self.ret)
+        write!(f, "(fn {} {} : {})", self.name, params, self.return_type())
     }
 }
 

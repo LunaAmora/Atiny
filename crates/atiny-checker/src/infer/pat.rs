@@ -10,8 +10,9 @@ use std::{collections::HashSet, rc::Rc};
 
 impl<'a> Infer<'a> for Pattern {
     type Context = (&'a mut Ctx, &'a mut HashSet<String>);
+    type Return = Type;
 
-    fn infer(self, (ctx, set): Self::Context) -> Type {
+    fn infer(self, (ctx, set): Self::Context) -> Self::Return {
         use AtomKind::*;
         *ctx = ctx.set_position(self.location);
 
