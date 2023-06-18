@@ -4,25 +4,19 @@ use super::Check;
 use crate::infer::Infer;
 use crate::{context::Ctx, types::*, unify::unify};
 
-use atiny_tree::r#abstract::{Expr, ExprKind};
+use atiny_tree::r#abstract::Expr;
 
-impl Check<'_> for Expr {
+type Elaborated = atiny_tree::elaborated::Expr<Type>;
+
+impl Check<'_> for &Expr {
     type Context = Ctx;
+    type Result = Elaborated;
 
-    fn check(self, ctx: Self::Context, expected: Type) {
+    fn check(self, ctx: Self::Context, expected: Type) -> Self::Result {
         let ctx = ctx.set_position(self.location);
 
-        match (self.data, &*expected) {
-            (ExprKind::Abstraction(param, body), MonoType::Arrow(left, right)) => {
-                let new_ctx = ctx.extend(param, left.to_poly());
-                body.check(new_ctx, right.clone());
-            }
-
-            (data, _) => {
-                let located = Self::new(self.location, data);
-                let infer = located.infer(ctx.clone());
-                unify(ctx, infer, expected);
-            }
-        }
+        let (infer, elaborated) = self.infer(ctx.clone());
+        unify(ctx, infer, expected);
+        elaborated
     }
 }

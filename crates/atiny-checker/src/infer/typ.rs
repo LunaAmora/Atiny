@@ -6,14 +6,14 @@ use crate::{context::Ctx, types::*};
 use atiny_tree::r#abstract::{TypeKind, TypeNode};
 use std::rc::Rc;
 
-impl Infer<'_> for TypeNode {
+impl Infer<'_> for &TypeNode {
     type Context = Ctx;
     type Return = Type;
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
         let ctx = ctx.set_position(self.location);
 
-        match self.data {
+        match &self.data {
             TypeKind::Arrow(arrow) => {
                 let left = arrow.left.infer(ctx.clone());
                 let right = arrow.right.infer(ctx);
@@ -22,9 +22,9 @@ impl Infer<'_> for TypeNode {
 
             TypeKind::Variable(v) => {
                 if ctx.signatures.types.get(&v.name).is_some() {
-                    MonoType::typ(v.name)
+                    MonoType::typ(v.name.to_owned())
                 } else if ctx.typ_map.contains(&v.name) {
-                    MonoType::var(v.name)
+                    MonoType::var(v.name.to_owned())
                 } else {
                     ctx.new_error(format!("unbound type variable '{}'", v.name))
                 }
@@ -33,25 +33,25 @@ impl Infer<'_> for TypeNode {
             TypeKind::Tuple(tuple) => Rc::new(MonoType::Tuple(
                 tuple
                     .types
-                    .into_iter()
+                    .iter()
                     .map(|typ| typ.infer(ctx.clone()))
                     .collect(),
             )),
 
             // TODO: Error when try to infer a forall inside other types.
-            TypeKind::Forall(forall) => TypeScheme {
-                names: forall.args.clone(),
-                mono: forall.body.infer(ctx.extend_types(&forall.args)),
+            TypeKind::Forall(forall) => {
+                TypeScheme {
+                    names: forall.args.clone(),
+                    mono: forall.body.infer(ctx.extend_types(&forall.args)),
+                }
+                .instantiate(ctx)
+                .0
             }
-            .instantiate(ctx),
 
             TypeKind::Application(app) => match ctx.signatures.types.get(&app.fun) {
                 Some(sig) if sig.params.len() == app.args.len() => Rc::new(MonoType::Application(
                     sig.name.clone(),
-                    app.args
-                        .into_iter()
-                        .map(|typ| typ.infer(ctx.clone()))
-                        .collect(),
+                    app.args.iter().map(|typ| typ.infer(ctx.clone())).collect(),
                 )),
 
                 Some(sig) => ctx.new_error(format!(

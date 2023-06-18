@@ -33,14 +33,14 @@ impl TypeScheme {
         Rc::new(Self { names, mono })
     }
 
-    pub fn instantiate(&self, ctx: Ctx) -> Type {
+    pub fn instantiate(&self, ctx: Ctx) -> (Type, Vec<Type>) {
         let mut types = Vec::new();
 
         for _ in &self.names {
             types.push(MonoType::new_hole(ctx.new_name(), ctx.level));
         }
 
-        self.instantiate_with(&types)
+        (self.instantiate_with(&types), types)
     }
 
     pub fn instantiate_with(&self, types: &[Type]) -> Type {
@@ -266,6 +266,10 @@ impl MonoType {
             names: vec![],
             mono: Rc::new(self.clone()),
         })
+    }
+
+    pub fn tuple(vec: Vec<Type>) -> Type {
+        Rc::new(Self::Tuple(vec))
     }
 
     pub fn var(name: String) -> Rc<Self> {

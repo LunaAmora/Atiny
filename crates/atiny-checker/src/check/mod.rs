@@ -16,7 +16,8 @@ pub mod expr;
 ///
 pub trait Check<'a> {
     type Context;
+    type Result;
 
     /// Checks an expression against a known type.
-    fn check(self, ctx: Self::Context, typ: Type);
+    fn check(self, ctx: Self::Context, typ: Type) -> Self::Result;
 }

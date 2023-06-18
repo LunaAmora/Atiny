@@ -10,36 +10,11 @@ use std::{
 };
 
 use atiny_location::ByteRange;
+use atiny_tree::elaborated::{CaseTreeNode, Symbol};
 use atiny_tree::r#abstract::*;
 use itertools::Itertools;
 
 use crate::{context::Ctx, types::*};
-
-pub enum CaseTree {
-    Node(Vec<(String, CaseTree)>),
-    Leaf(usize),
-}
-
-impl CaseTree {
-    pub fn render_indented(&self, f: &mut Formatter<'_>, indent: usize) -> std::fmt::Result {
-        match self {
-            Self::Node(vec) => {
-                for (name, tree) in vec {
-                    writeln!(f, "{:indent$}{}:", "", name, indent = indent)?;
-                    tree.render_indented(f, indent + 2)?;
-                }
-            }
-            Self::Leaf(index) => writeln!(f, "{:indent$}{}", "", index, indent = indent)?,
-        }
-        Ok(())
-    }
-}
-
-impl Display for CaseTree {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.render_indented(f, 0)
-    }
-}
 
 /// It is used to return possible constructors of a type. Some types have infinite constructors like
 /// Int so we cannot return a list of all the constructors. In that case we return Infinite.
@@ -52,7 +27,7 @@ pub enum Finitude<T> {
 /// if it's not exhaustive proving it's non exhaustiveness by contradiction. If it's exhaustive then
 /// it will return a case tree that contains all the possible cases of the problem.
 pub enum Witness {
-    Ok(CaseTree),
+    Ok(CaseTreeNode),
     NonExhaustive(Row),
 }
 
@@ -86,6 +61,13 @@ impl Witness {
             Self::NonExhaustive(row.prepend(pat))
         } else {
             self
+        }
+    }
+
+    pub fn result(self) -> Result<CaseTreeNode, Pattern> {
+        match self {
+            Self::Ok(res) => Ok(res),
+            Self::NonExhaustive(result) => Err(result.into_pattern()),
         }
     }
 }
@@ -381,11 +363,11 @@ impl Problem {
                     if witness.is_non_exhaustive() {
                         return witness.expand(len, Some(name.clone()));
                     } else if let Witness::Ok(tree) = witness {
-                        nodes.push((name.clone(), tree));
+                        nodes.push((Symbol(name.clone()), tree));
                     }
                 }
 
-                Witness::Ok(CaseTree::Node(nodes))
+                Witness::Ok(CaseTreeNode::Node(nodes))
             }
 
             // Opaque types will never be splitted because they are either incomplete or
@@ -565,7 +547,7 @@ impl Problem {
         if self.is_empty() {
             Witness::NonExhaustive(self.case)
         } else if let Some(row) = self.get_exhaustive_row().and_then(|x| x.0) {
-            Witness::Ok(CaseTree::Leaf(row))
+            Witness::Ok(CaseTreeNode::Leaf(row))
         } else {
             // The first pattern of the case will guide the specialization of the whole problem.
             let pat = self.case.first().clone().data;

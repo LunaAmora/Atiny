@@ -1,12 +1,10 @@
 use crate::{check::Check, context::Ctx, infer::Infer, types::*};
-use atiny_tree::r#abstract::{
-    Constructor, Expr, FnDecl, TopLevel, TopLevelKind, TypeDecl, TypeKind, TypeNode,
-};
+use atiny_tree::{elaborated::FnBody, r#abstract::*};
 use std::{collections::HashSet, rc::Rc};
 
 impl<'a> Infer<'a> for Vec<TopLevel> {
     type Context = &'a mut Ctx;
-    type Return = &'a mut Ctx;
+    type Return = Vec<FnBody<Type>>;
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
         let mut fn_vec = Vec::new();
@@ -20,16 +18,14 @@ impl<'a> Infer<'a> for Vec<TopLevel> {
             }
         }
 
-        let bodies: Vec<_> = fn_vec
+        let mut bodies = Vec::new();
+
+        fn_vec
             .into_iter()
             .filter_map(|fun_decl| fun_decl.infer(ctx))
-            .collect();
+            .for_each(|body| bodies.push(body));
 
-        for body in bodies {
-            body.infer(ctx);
-        }
-
-        ctx
+        bodies.into_iter().map(|body| body.infer(ctx)).collect()
     }
 }
 
@@ -70,7 +66,7 @@ impl<'a> Infer<'a> for (&str, Constructor) {
 
         let args: Vec<_> = constr
             .types
-            .into_iter()
+            .iter()
             .map(|t| t.infer(new_ctx.clone()))
             .collect();
 
@@ -108,8 +104,8 @@ impl<'a> Infer<'a> for FnDecl {
 
         let args: Vec<_> = self
             .params
-            .into_iter()
-            .map(|(a, p)| (a, p.infer(new_ctx.clone())))
+            .iter()
+            .map(|(a, p)| (a.to_owned(), p.infer(new_ctx.clone())))
             .collect();
 
         let ret = self.ret.infer(new_ctx);
@@ -133,7 +129,7 @@ impl<'a> Infer<'a> for FnDecl {
 
 impl<'a> Infer<'a> for (String, Expr) {
     type Context = &'a Ctx;
-    type Return = ();
+    type Return = FnBody<Type>;
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
         let (fn_name, body) = self;
@@ -148,7 +144,7 @@ impl<'a> Infer<'a> for (String, Expr) {
             new_ctx.map.insert(arg.to_string(), arg_type.to_poly());
         }
 
-        body.check(new_ctx, sig.return_type());
+        FnBody(body.check(new_ctx, sig.return_type()))
     }
 }
 

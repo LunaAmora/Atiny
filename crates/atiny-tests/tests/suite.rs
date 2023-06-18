@@ -29,7 +29,7 @@ mk_test! { "/suite/expr/", |code| {
         .parse(&code)
         .map_err(|x| vec![from_lalrpop(x)])
         .map(|parsed| (parsed.infer(ctx.clone()), ctx.take_errors()))
-        .and_then(|(typ, errors)| errors.map_or_else(|| Ok(typ.to_string()), Err))
+        .and_then(|((typ, _), errs)| errs.map_or_else(|| Ok(typ.to_string()), Err))
         .unwrap_or_else(|errs| {
             errs.into_iter().map(|x| x.with_code(&code).to_string()).collect()
         })
@@ -51,7 +51,8 @@ mk_test! { "/suite/", |code| {
     ProgramParser::new()
         .parse(&code)
         .map_err(|x| vec![from_lalrpop(x)])
-        .map(|parsed| parsed.infer(&mut ctx).take_errors())
+        .map(|parsed| parsed.infer(&mut ctx))
+        .map(|_| ctx.take_errors())
         .and_then(|errs| errs.map_or_else(|| Ok(String::new()), Err))
         .unwrap_or_else(|errs| {
             errs.into_iter().map(|x| x.with_code(&code).to_string()).collect()

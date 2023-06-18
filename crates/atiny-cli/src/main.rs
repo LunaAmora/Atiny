@@ -56,7 +56,8 @@ fn main() {
     ProgramParser::new()
         .parse(code)
         .map_err(|x| vec![from_lalrpop(x)])
-        .map(|parsed| parsed.infer(&mut ctx).take_errors())
+        .map(|parsed| parsed.infer(&mut ctx))
+        .map(|_| ctx.take_errors())
         .and_then(|errs| errs.map_or_else(|| Ok(()), Err))
         .unwrap_or_else(|errs| {
             for err in errs {
