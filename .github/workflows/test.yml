@@ -67,7 +67,7 @@ jobs:
       fail-fast: false
       matrix:
         rust:
-          - 3
+          - nightly
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
