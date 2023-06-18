@@ -1,67 +1,38 @@
-use std::process::exit;
+//! The Glorious Atiny Compiler.
+//!
+//! It compiles the atiny language to LLVM. (Not Yet!)
+//!
+//!
 
-use atiny_checker::{
-    context::Ctx,
-    infer::Infer,
-    types::{MonoType, TypeSignature, TypeValue},
-};
+use std::{path::PathBuf, process::exit};
+
+use atiny_checker::context::Ctx;
+use atiny_checker::infer::Infer;
 use atiny_parser::{error::from_lalrpop, ProgramParser};
+use clap::Parser;
+
+#[derive(Parser)]
+enum CargoCli {
+    /// Type checks a file and returns if it is valid or not.
+    TypeCheck { file: PathBuf },
+}
 
 fn main() {
-    let code = "
-        type List t = | Cons t (List t) | Nil
-        type Unit = | Unit
-        type Bool = | true | false
+    let CargoCli::TypeCheck { file } = CargoCli::parse();
 
-        fn ata (x: List Int) : Int {
-            match Nil {
-                Cons true (Cons _ true) => 2,
-                Nil                     => 4,
-            }
-        }
-    ";
+    let code = std::fs::read_to_string(file).expect("cannot read file!");
 
     let mut ctx = Ctx::default();
 
-    ctx.signatures.types.insert(
-        "Int".to_string(),
-        TypeSignature {
-            name: "Int".to_string(),
-            params: vec![],
-            value: TypeValue::Opaque,
-        },
-    );
-
-    ctx = ctx.extend(
-        "add".to_string(),
-        MonoType::arrow(
-            MonoType::typ("Int".to_string()),
-            MonoType::arrow(
-                MonoType::typ("Int".to_string()),
-                MonoType::typ("Int".to_string()),
-            ),
-        )
-        .to_poly(),
-    );
-
-    ctx = ctx.extend(
-        "to_string".to_string(),
-        MonoType::arrow(
-            MonoType::typ("Int".to_string()),
-            MonoType::typ("String".to_string()),
-        )
-        .to_poly(),
-    );
-
     ProgramParser::new()
-        .parse(code)
+        .parse(&code)
         .map_err(|x| vec![from_lalrpop(x)])
         .map(|parsed| parsed.infer(&mut ctx))
         .map(|_| ctx.take_errors())
         .and_then(|errs| errs.map_or_else(|| Ok(()), Err))
         .unwrap_or_else(|errs| {
             for err in errs {
-                eprintln!("{}", err.with_code(code));
+                eprintln!("{}", err.with_code(&code));
             }
 
             exit(1)

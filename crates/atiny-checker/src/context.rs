@@ -22,7 +22,7 @@ impl Display for Signatures {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Ctx {
     counter: Rc<RefCell<usize>>,
     pub errors: Rc<RefCell<Vec<Error>>>,
@@ -31,6 +31,31 @@ pub struct Ctx {
     pub location: ByteRange,
     pub level: usize,
     pub signatures: Signatures,
+}
+
+impl Default for Ctx {
+    fn default() -> Self {
+        let mut ctx = Self {
+            counter: Default::default(),
+            errors: Default::default(),
+            map: Default::default(),
+            typ_map: Default::default(),
+            location: Default::default(),
+            level: Default::default(),
+            signatures: Default::default(),
+        };
+
+        ctx.signatures.types.insert(
+            "Int".to_string(),
+            TypeSignature {
+                name: "Int".to_string(),
+                params: vec![],
+                value: TypeValue::Opaque,
+            },
+        );
+
+        ctx
+    }
 }
 
 impl Ctx {
