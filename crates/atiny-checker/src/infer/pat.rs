@@ -24,13 +24,11 @@ impl<'a> Infer<'a> for Pattern {
                     Self::new(self.location, PatternKind::Constructor(x, vec![])).infer((ctx, set))
                 }
 
-                Identifier(x) if x == "_" || set.insert(x.to_owned()) => {
+                Identifier(x) if x == "_" => ctx.new_hole(),
+
+                Identifier(x) if set.insert(x.to_owned()) => {
                     let hole = ctx.new_hole();
-
-                    if x != "_" {
-                        *ctx = ctx.extend(x, hole.to_poly());
-                    }
-
+                    *ctx = ctx.extend(x, hole.to_poly());
                     hole
                 }
 
@@ -57,19 +55,17 @@ impl<'a> Infer<'a> for Pattern {
                     ));
                 }
 
-                let mut typ = constructor.typ.instantiate(ctx.clone());
+                let (mut typ, _) = constructor.typ.instantiate(ctx.clone());
 
                 for pat in args {
                     let pat_ty = pat.infer((ctx, set));
 
-                    let result = if let MonoType::Arrow(left, right) = &*typ {
-                        unify(ctx.clone(), pat_ty.clone(), left.clone());
-                        right.clone()
-                    } else {
+                    let MonoType::Arrow(left, right) = &*typ else {
                         unreachable!("impossible branch when matching constructor arguments")
                     };
 
-                    typ = result;
+                    unify(ctx.clone(), pat_ty.clone(), left.clone());
+                    typ = right.clone();
                 }
 
                 typ
