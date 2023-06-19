@@ -1,0 +1,5 @@
+
+[error]: identifier 'b' bound more than once at 1:8~1:9
+
+  1 |     (b, b) => b,
+    |         ^
