@@ -1,0 +1,5 @@
+
+[error]: found cyclic type of infinite size at 2:4~2:10
+
+  2 |     (c, d) => c
+    |     ^^^^^^
