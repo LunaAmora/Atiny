@@ -32,7 +32,7 @@ fn main() {
         .and_then(|errs| errs.map_or_else(|| Ok(()), Err))
         .unwrap_or_else(|errs| {
             for err in errs {
-                eprintln!("{}", err.with_code(&code));
+                eprint!("{}", err.with_code(&code));
             }
 
             exit(1)

@@ -4,7 +4,10 @@
   5 |         (1, true)  => 2,
     |         ^^^^^^^^^
 
-[error]: non-exhaustive pattern match: (_, false) at 6:8~6:17
+[error]: non-exhaustive pattern match: (_, false) at 3:10~3:11
 
+  3 |     match x {
+    |           ^
   6 |         (_, true)  => 3,
-    |         ^^^^^^^^^
+  7 |         (_, false) => _,
+    |         ++++++++++++++++
