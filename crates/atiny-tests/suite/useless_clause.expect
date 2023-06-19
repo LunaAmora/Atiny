@@ -1,13 +1,15 @@
 
-[error]: the clause is useless: (1, true) at 5:8~5:17
+[error]: the clause is useless: (1, true)
+    ┌─> useless_clause.at:6:9
+    │
+  6 │        (1, true)  => 2,
+    │        ^^^^^^^^^
 
-  5 |         (1, true)  => 2,
-    |         ^^^^^^^^^
-
-[error]: non-exhaustive pattern match: (_, false) at 3:10~3:11
-
-  3 |     match x {
-    |           ^
-  6 |         (_, true)  => 3,
-  7 |         (_, false) => _,
-    |         ++++++++++++++++
+[error]: non-exhaustive pattern match: (_, false)
+    ┌─> useless_clause.at:4:11
+    │
+  4 │    match x {
+    │          ^
+  7 │        (_, true)  => 3,
+  8 │        (_, false) => _,
+    │        ++++++++++++++++

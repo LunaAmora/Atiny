@@ -1,5 +1,6 @@
 
-[error]: found cyclic type of infinite size at 2:4~2:10
-
-  2 |     (c, d) => c
-    |     ^^^^^^
+[error]: found cyclic type of infinite size
+    ┌─> cyclic.at:3:5
+    │
+  3 │    (c, d) => c
+    │    ^^^^^^

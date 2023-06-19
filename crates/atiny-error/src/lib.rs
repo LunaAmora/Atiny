@@ -45,14 +45,19 @@ impl Error {
         }
     }
 
-    pub fn with_code(self, code: &str) -> ErrorWithCode {
-        ErrorWithCode { err: self, code }
+    pub fn with_code<'a>(self, code: &'a str, file_name: &'a str) -> ErrorWithCode<'a> {
+        ErrorWithCode {
+            err: self,
+            code,
+            file_name,
+        }
     }
 }
 
 pub struct ErrorWithCode<'a> {
     err: Error,
     code: &'a str,
+    file_name: &'a str,
 }
 
 impl<'a> Display for ErrorWithCode<'a> {
@@ -60,15 +65,20 @@ impl<'a> Display for ErrorWithCode<'a> {
         let location = self.err.location.locate(self.code);
 
         let is_sugestion = matches!(self.err.message, ErrorKind::Sugestion(_));
+        let pad = 3;
 
         if !is_sugestion {
             writeln!(
                 f,
-                "\n[error]: {message} at {location}\n",
-                message = self.err.message
+                "\n[error]: {message}\n{:>pad$} ┌─> {file_name}:{line}:{column}\n{:>pad$} │",
+                "",
+                "",
+                message = self.err.message,
+                file_name = self.file_name,
+                line = location.0.line + 1,
+                column = location.0.column + 1
             )?;
         }
-
         let code = self.code.lines().collect::<Vec<_>>();
         let lines = code[location.0.line..=location.1.line].to_vec();
 
@@ -76,21 +86,21 @@ impl<'a> Display for ErrorWithCode<'a> {
         let idx = location.1.line - location.0.line;
 
         for (i, line) in lines.iter().enumerate() {
-            let line_number = location.0.line + i;
-            writeln!(f, "{:>3} | {}", line_number, line)?;
+            let line_n = location.0.line + i + 1;
+            writeln!(f, "{:>pad$} │{}", line_n, line)?;
 
             let indent = location.0.column;
             let size = location.1.column - location.0.column;
 
             if !is_sugestion && inline && i == idx {
-                writeln!(f, "{:>3} | {: >indent$}{:^>size$}", "", "", "")?;
+                writeln!(f, "{:>pad$} │{: >indent$}{:^>size$}", "", "", "")?;
             }
 
             if is_sugestion {
                 let message = self.err.message.to_string();
                 let size = message.len();
-                writeln!(f, "{:>3} | {:>indent$}{}", line_number + 1, "", message)?;
-                writeln!(f, "{:>3} | {:>indent$}{:+>size$}", "", "", "")?;
+                writeln!(f, "{:>pad$} │{:>indent$}{}", line_n + 1, "", message)?;
+                writeln!(f, "{:>pad$} │{:>indent$}{:+>size$}", "", "", "")?;
             }
         }
 

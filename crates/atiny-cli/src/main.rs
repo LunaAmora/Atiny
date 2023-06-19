@@ -20,7 +20,7 @@ enum CargoCli {
 fn main() {
     let CargoCli::TypeCheck { file } = CargoCli::parse();
 
-    let code = std::fs::read_to_string(file).expect("cannot read file!");
+    let code = std::fs::read_to_string(&file).expect("cannot read file!");
 
     let mut ctx = Ctx::default();
 
@@ -32,7 +32,7 @@ fn main() {
         .and_then(|errs| errs.map_or_else(|| Ok(()), Err))
         .unwrap_or_else(|errs| {
             for err in errs {
-                eprint!("{}", err.with_code(&code));
+                eprint!("{}", err.with_code(&code, &file.to_string_lossy()));
             }
 
             exit(1)
