@@ -19,11 +19,11 @@ Atiny is a simple compiler for a ML like language with some cool features from t
 
 The objectives with the language are:
 
-- [ ] Surface Syntax
-- [ ] Parsing
-- [ ] Basic Type Checking
-- [ ] Exhaustiveness Checking
-- [ ] Elaboration
+- [x] Surface Syntax
+- [x] Parsing
+- [x] Basic Type Checking
+- [x] Exhaustiveness Checking
+- [x] Elaboration
 - [ ] Records 
 - [ ] Improve parser
     - [ ] Change it to a hand-written one
