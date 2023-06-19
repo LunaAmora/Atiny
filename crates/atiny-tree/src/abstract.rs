@@ -93,11 +93,7 @@ impl Display for PatternKind {
                 write!(f, "{}", name)
             }
             Self::Constructor(name, args) => {
-                write!(
-                    f,
-                    "{name}{}",
-                    args.iter().map(|x| format!(" {x}")).join("")
-                )
+                write!(f, "{name}{}", args.iter().map(|x| format!(" {x}")).join(""))
             }
         }
     }
