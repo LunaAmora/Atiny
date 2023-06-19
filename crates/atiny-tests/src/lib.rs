@@ -5,7 +5,7 @@ use test::{TestDesc, TestDescAndFn, TestName};
 
 pub struct Test {
     pub directory: &'static str,
-    pub run: fn(source: String) -> String,
+    pub run: fn(source: String, file_name: String) -> String,
 }
 
 pub fn split_name(file: &DirEntry) -> (String, String) {
@@ -35,7 +35,7 @@ pub fn test_runner(tests: &[&Test]) {
 
         for file in directory {
             if let Ok(file) = file {
-                let (file_name, typ) = split_name(&file);
+                let (mut file_name, typ) = split_name(&file);
 
                 if typ != "at" {
                     continue;
@@ -66,8 +66,8 @@ pub fn test_runner(tests: &[&Test]) {
                             path.pop();
 
                             let path = path.join(format!("{}.{}", file_name, "expect"));
-
-                            let result = function(content);
+                            file_name.push_str(".at");
+                            let result = function(content, file_name);
 
                             if let Ok(expects) = read_to_string(path.clone()) {
                                 if expects.eq(&result) {
