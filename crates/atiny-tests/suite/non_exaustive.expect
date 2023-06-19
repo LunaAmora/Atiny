@@ -1,5 +1,8 @@
 
-[error]: non-exhaustive pattern match: (Cons (true, false) Nil) at 8:8~8:11
+[error]: non-exhaustive pattern match: Cons (true, false) Nil at 4:10~4:13
 
+  4 |     match Nil {
+    |           ^^^
   8 |         Nil                         => 4,
-    |         ^^^
+  9 |         Cons (true, false) Nil => _,
+    |         ++++++++++++++++++++++++++++

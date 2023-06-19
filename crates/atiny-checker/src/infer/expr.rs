@@ -138,7 +138,7 @@ impl Infer<'_> for &Expr {
                             let column = vec![column_pat.clone()];
                             let problem = Problem::new(pat_ty.clone(), column, collumns.clone());
 
-                            ctx = ctx.set_position(column_pat.location);
+                            ctx.location = column_pat.location;
                             let witness = problem.exhaustiveness(&ctx);
 
                             if !witness.is_non_exhaustive() {
@@ -158,7 +158,12 @@ impl Infer<'_> for &Expr {
 
                     witness.result().map_or_else(
                         |err| {
+                            let last_pat_loc = ctx.location;
+                            ctx.location = e.location;
                             ctx.error(format!("non-exhaustive pattern match: {}", err));
+
+                            ctx.location = last_pat_loc;
+                            ctx.sugestion(format!("{} => _,", err));
                             Elaborated::Error
                         },
                         |tree| Elaborated::CaseTree(Box::new(scrutinee), CaseTree { tree, places }),
