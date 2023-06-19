@@ -3,7 +3,7 @@
 //!
 use std::{
     cell::{RefCell, RefMut},
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     fmt::{self, Display},
     hash::{Hash, Hasher},
     ptr::addr_of,
@@ -49,7 +49,7 @@ impl TypeScheme {
             .iter()
             .cloned()
             .zip(types.iter().cloned())
-            .collect::<HashMap<String, Type>>();
+            .collect::<BTreeMap<String, Type>>();
 
         self.mono.substitute(&substitutions)
     }
@@ -230,7 +230,7 @@ impl Display for MonoType {
 }
 
 impl MonoType {
-    pub fn substitute(&self, substs: &HashMap<String, Rc<Self>>) -> Rc<Self> {
+    pub fn substitute(&self, substs: &BTreeMap<String, Rc<Self>>) -> Rc<Self> {
         match self {
             Self::Var(name) => substs
                 .get(name)

@@ -11,8 +11,8 @@ use super::types::*;
 
 #[derive(Clone, Default, Debug)]
 pub struct Signatures {
-    pub types: im_rc::HashMap<String, TypeSignature>,
-    pub values: im_rc::HashMap<String, DeclSignature>,
+    pub types: im_rc::OrdMap<String, TypeSignature>,
+    pub values: im_rc::OrdMap<String, DeclSignature>,
 }
 
 impl Display for Signatures {
@@ -26,8 +26,8 @@ impl Display for Signatures {
 pub struct Ctx {
     counter: Rc<RefCell<usize>>,
     pub errors: Rc<RefCell<Vec<Error>>>,
-    pub map: im_rc::HashMap<String, Rc<TypeScheme>>,
-    pub typ_map: im_rc::HashSet<String>,
+    pub map: im_rc::OrdMap<String, Rc<TypeScheme>>,
+    pub typ_map: im_rc::OrdSet<String>,
     pub location: ByteRange,
     pub level: usize,
     pub signatures: Signatures,
