@@ -16,6 +16,12 @@ pub enum AtomKind<T> {
     Group(Box<T>),
 }
 
+impl<T> AtomKind<T> {
+    pub fn unit() -> Self {
+        Self::Identifier("()".to_string())
+    }
+}
+
 impl<T: Display> Display for AtomKind<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -205,6 +211,14 @@ pub enum TypeKind {
     Tuple(TypeTupleNode),
 }
 
+impl TypeKind {
+    pub fn unit() -> Self {
+        Self::Variable(VariableNode {
+            name: "()".to_string(),
+        })
+    }
+}
+
 impl Display for TypeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -243,6 +257,19 @@ pub struct TypeDecl {
     pub constructors: Vec<Constructor>,
 }
 
+impl TypeDecl {
+    pub fn unit() -> Self {
+        Self {
+            name: "()".to_string(),
+            params: Vec::new(),
+            constructors: vec![Constructor {
+                name: "()".to_string(),
+                types: Vec::new(),
+            }],
+        }
+    }
+}
+
 impl Display for TypeDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let params = self.params.iter().map(|x| format!(" {x}")).join("");
@@ -255,8 +282,29 @@ impl Display for TypeDecl {
 pub struct FnDecl {
     pub name: String,
     pub params: Vec<(String, TypeNode)>,
-    pub ret: Box<TypeNode>,
-    pub body: Option<Expr>,
+    pub ret: TypeNode,
+    pub body: Expr,
+}
+
+impl FnDecl {
+    pub fn new(
+        name: Located<String>,
+        mut params: Vec<(String, TypeNode)>,
+        ret: Option<TypeNode>,
+        body: Expr,
+    ) -> Self {
+        let loc = name.location;
+        if params.is_empty() {
+            params = vec![("_".to_owned(), Located::new(loc, TypeKind::unit()))];
+        }
+
+        Self {
+            name: name.data,
+            params,
+            ret: ret.unwrap_or_else(|| Located::new(loc, TypeKind::unit())),
+            body,
+        }
+    }
 }
 
 impl Display for FnDecl {
@@ -267,12 +315,11 @@ impl Display for FnDecl {
             .map(|(n, t)| format!("({} : {})", n, t))
             .join(" ");
 
-        let body = self
-            .body
-            .as_ref()
-            .map_or_else(|| ";".to_string(), |b| format!("{{{}}}", b));
-
-        write!(f, "fn {} {} : {} {}", self.name, params, self.ret, body)
+        write!(
+            f,
+            "fn {} {} : {} {{{}}}",
+            self.name, params, self.ret, self.body
+        )
     }
 }
 

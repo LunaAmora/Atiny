@@ -1,0 +1,15 @@
+fn main1 {
+
+}
+
+fn main2 : () {
+
+}
+
+fn main3 (_: ()) : () {
+
+}
+
+fn main4 : Int {
+
+}

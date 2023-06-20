@@ -29,7 +29,7 @@ ExprAtomItem: AtomKind<Expr> = {
     <id: Id>           => AtomKind::Identifier(id),
     "(" <mut vec:Sep<",", Expr>> ")" => {
         match vec.len() {
-            0 => AtomKind::Identifier("Unit".to_string()),
+            0 => AtomKind::unit(),
             1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
             _ => AtomKind::Tuple(vec),
         }
@@ -54,19 +54,28 @@ ExprItem: ExprKind = {
     "if" "let" <pat:Pattern> "=" <m:Expr>
         "{" <t:Expr> "}" "else"
         "{" <f:Expr> "}"                         => ExprKind::if_let(pat, m, t, f),
-    "{" <t:Expr> "}"                             => t.data,
-    <f:Call> ":" <t: TypeNode>                       => ExprKind::Annotation(Box::new(f), Box::new(t)),
+    <f:Call> <t: TypeAnotation>                  => ExprKind::Annotation(Box::new(f), Box::new(t)),
     <f:Call>                                     => f.data,
 };
 
-pub Expr : Expr = Loc<ExprItem>;
+Block : Expr = {
+    "{" <body: Expr> "}"    => body,
+    <b: Loc<r"[{][\s]*[}]">> => {
+        Located::new(b.location, ExprKind::Atom(AtomKind::unit()))
+    }
+};
+
+pub Expr : Expr = {
+    <Loc<ExprItem>> => <>,
+    <Block>         => <>
+};
 
 PatAtomItem: AtomKind<Pattern> = {
     <n:Num>            => AtomKind::Number(n),
     <id: Id>           => AtomKind::Identifier(id),
     "(" <mut vec:Sep<",", Pattern>> ")" => {
         match vec.len() {
-            0 => AtomKind::Identifier("Unit".to_string()),
+            0 => AtomKind::unit(),
             1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
             _ => AtomKind::Tuple(vec),
         }
@@ -96,7 +105,7 @@ TypeAtomItem : TypeKind = {
     <id: Id>                    => TypeKind::Variable(VariableNode { name: id }),
     "(" <mut types:Sep<",", TypeNode>> ")" => {
         match types.len() {
-            0 => TypeKind::Variable(VariableNode {name : "Unit".to_string()}),
+            0 => TypeKind::unit(),
             1 => types.pop().unwrap().data,
             _ => TypeKind::Tuple(TypeTupleNode { types }),
         }
@@ -140,17 +149,21 @@ TypeDecl : TypeDecl = {
     }
 }
 
+TypeAnotation : TypeNode = {
+    ":" <typ: TypeNode> => typ
+}
+
 Param : (String, TypeNode) = {
-    "(" <name: Id> ":" <typ: TypeNode> ")" => (name, typ)
+    "(" <name: Id> <typ: TypeAnotation> ")" => (name, typ)
 }
 
 FnDecl : FnDecl = {
-    "fn" <name: Id> <params: Param*> ":" <ret: TypeNode> "{" <body: Expr> "}" => FnDecl {
+    "fn" <name: Loc<Id>> <params: Param*> <ret: TypeAnotation?> <body: Block> => FnDecl::new(
         name,
         params,
-        ret: Box::new(ret),
-        body: Some(body)
-    }
+        ret,
+        body
+    )
 } 
 
 TopLevelKind : TopLevelKind = {
