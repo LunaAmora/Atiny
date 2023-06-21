@@ -10,6 +10,7 @@ use itertools::Itertools;
 /// Primary expressions that are used both for [Pattern] and [Expr].
 #[derive(Debug, Clone)]
 pub enum AtomKind<T> {
+    Wildcard,
     Number(u64),
     Tuple(Vec<T>),
     Identifier(String),
@@ -25,6 +26,7 @@ impl<T> AtomKind<T> {
 impl<T: Display> Display for AtomKind<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Wildcard => write!(f, "_"),
             Self::Number(n) => write!(f, "{n}"),
             Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Identifier(id) => write!(f, "{id}"),
@@ -66,7 +68,7 @@ impl ExprKind {
     pub fn if_let(pattern: Pattern, matcher: Expr, true_arm: Expr, else_arm: Expr) -> Self {
         let else_pat = Pattern {
             location: else_arm.location,
-            data: PatternKind::Atom(AtomKind::Identifier("_".to_string())),
+            data: PatternKind::Atom(AtomKind::Wildcard),
         };
 
         Self::Match(
@@ -117,7 +119,7 @@ impl PatternKind {
 pub fn wildcard() -> Pattern {
     Pattern {
         location: ByteRange(Byte(0), Byte(0)),
-        data: PatternKind::Atom(AtomKind::Identifier("_".to_string())),
+        data: PatternKind::Atom(AtomKind::Wildcard),
     }
 }
 

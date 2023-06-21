@@ -22,6 +22,11 @@ impl Infer<'_> for &Expr {
 
         match &self.data {
             Atom(a) => match a {
+                Wildcard => (
+                    ctx.new_error("`_` may only appear on patterns".to_string()),
+                    Elaborated::Error,
+                ),
+
                 Number(n) => (MonoType::typ("Int".to_string()), Elaborated::Number(*n)),
 
                 Tuple(vec) => {
