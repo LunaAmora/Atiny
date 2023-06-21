@@ -3,10 +3,10 @@
 
     ┌─> non_exaustive.at:5:11
     │
-  5 │    match Nil {
-    │          ^^^
+  5 │     match Nil {
+    │           ^^^
     │
-  9 │        Nil                         => 4,
- 10 │        Cons (true, false) Nil => _,
-    │        ++++++++++++++++++++++++++++
+  9 │         Nil                         => 4,
+ 10 │         Cons (true, false) Nil => _,
+    │         ++++++++++++++++++++++++++++
     │

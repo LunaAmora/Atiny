@@ -73,7 +73,7 @@ impl<'a> Display for ErrorWithCode<'a> {
 
         let print_lines = |f: &mut fmt::Formatter<'_>| -> fmt::Result {
             for (line, line_number) in code.lines().skip(line).zip(line..=end.line) {
-                writeln!(f, "{:>PAD$} │{}", line_number + 1, line)?;
+                writeln!(f, "{:>PAD$} │ {}", line_number + 1, line)?;
             }
             Ok(())
         };
@@ -84,8 +84,8 @@ impl<'a> Display for ErrorWithCode<'a> {
 
                 let sugestion = sugestion.to_string();
                 let size = sugestion.len();
-                writeln!(f, "{:>PAD$} │{:>column$}{sugestion}", end.line + 2, "")?;
-                writeln!(f, "{:>PAD$} │{:>column$}{:+>size$}", "", "", "")?;
+                writeln!(f, "{:>PAD$} │ {:>column$}{sugestion}", end.line + 2, "")?;
+                writeln!(f, "{:>PAD$} │ {:>column$}{:+>size$}", "", "", "")?;
             }
 
             error => {
@@ -97,7 +97,7 @@ impl<'a> Display for ErrorWithCode<'a> {
 
                 if line == end.line {
                     let size = end.column - column;
-                    writeln!(f, "{:>PAD$} │{:>column$}{:^>size$}", "", "", "")?;
+                    writeln!(f, "{:>PAD$} │ {:>column$}{:^>size$}", "", "", "")?;
                 }
             }
         };

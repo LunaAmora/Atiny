@@ -3,18 +3,18 @@
 
     ┌─> useless_clause.at:6:9
     │
-  6 │        (1, true)  => 2,
-    │        ^^^^^^^^^
+  6 │         (1, true)  => 2,
+    │         ^^^^^^^^^
     │
 
 [error]: non-exhaustive pattern match: (_, false)
 
     ┌─> useless_clause.at:4:11
     │
-  4 │    match x {
-    │          ^
+  4 │     match x {
+    │           ^
     │
-  7 │        (_, true)  => 3,
-  8 │        (_, false) => _,
-    │        ++++++++++++++++
+  7 │         (_, true)  => 3,
+  8 │         (_, false) => _,
+    │         ++++++++++++++++
     │

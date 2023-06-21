@@ -3,6 +3,6 @@
 
     ┌─> list_mismatch.at:6:27
     │
-  6 │        Cons true (Cons _ true) => 2,
-    │                          ^^^^
+  6 │         Cons true (Cons _ true) => 2,
+    │                           ^^^^
     │
