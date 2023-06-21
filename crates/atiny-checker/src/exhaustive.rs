@@ -616,6 +616,7 @@ impl Case<Pattern> {
 
     fn from_atom(ctx: &Ctx, atom: AtomKind<Pattern>) -> Self {
         match atom {
+            AtomKind::Wildcard => Self::Wildcard,
             AtomKind::Identifier(name) => ctx
                 .lookup_cons(&name)
                 .map_or_else(|| Self::Wildcard, |cons| Self::Constructor(cons, vec![])),

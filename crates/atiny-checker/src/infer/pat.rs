@@ -18,13 +18,13 @@ impl<'a> Infer<'a> for Pattern {
 
         match self.data {
             PatternKind::Atom(a) => match a {
+                Wildcard => ctx.new_hole(),
+
                 Number(_) => MonoType::typ("Int".to_string()),
 
                 Identifier(x) if ctx.lookup_cons(&x).is_some() => {
                     Self::new(self.location, PatternKind::Constructor(x, vec![])).infer((ctx, set))
                 }
-
-                Identifier(x) if x == "_" => ctx.new_hole(),
 
                 Identifier(x) if set.insert(x.to_owned()) => {
                     let hole = ctx.new_hole();

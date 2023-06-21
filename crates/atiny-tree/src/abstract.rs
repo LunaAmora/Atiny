@@ -10,6 +10,7 @@ use itertools::Itertools;
 /// Primary expressions that are used both for [Pattern] and [Expr].
 #[derive(Debug, Clone)]
 pub enum AtomKind<T> {
+    Wildcard,
     Number(u64),
     Tuple(Vec<T>),
     Identifier(String),
@@ -25,6 +26,7 @@ impl<T> AtomKind<T> {
 impl<T: Display> Display for AtomKind<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Wildcard => write!(f, "_"),
             Self::Number(n) => write!(f, "{n}"),
             Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Identifier(id) => write!(f, "{id}"),
@@ -66,7 +68,7 @@ impl ExprKind {
     pub fn if_let(pattern: Pattern, matcher: Expr, true_arm: Expr, else_arm: Expr) -> Self {
         let else_pat = Pattern {
             location: else_arm.location,
-            data: PatternKind::Atom(AtomKind::Identifier("_".to_string())),
+            data: PatternKind::Atom(AtomKind::Wildcard),
         };
 
         Self::Match(
@@ -117,7 +119,7 @@ impl PatternKind {
 pub fn wildcard() -> Pattern {
     Pattern {
         location: ByteRange(Byte(0), Byte(0)),
-        data: PatternKind::Atom(AtomKind::Identifier("_".to_string())),
+        data: PatternKind::Atom(AtomKind::Wildcard),
     }
 }
 
@@ -281,7 +283,7 @@ impl Display for TypeDecl {
 #[derive(Debug)]
 pub struct FnDecl {
     pub name: String,
-    pub params: Vec<(String, TypeNode)>,
+    pub params: Vec<(Pattern, TypeNode)>,
     pub ret: TypeNode,
     pub body: Expr,
 }
@@ -289,13 +291,16 @@ pub struct FnDecl {
 impl FnDecl {
     pub fn new(
         name: Located<String>,
-        mut params: Vec<(String, TypeNode)>,
+        mut params: Vec<(Pattern, TypeNode)>,
         ret: Option<TypeNode>,
         body: Expr,
     ) -> Self {
         let loc = name.location;
         if params.is_empty() {
-            params = vec![("_".to_owned(), Located::new(loc, TypeKind::unit()))];
+            params = vec![(
+                Located::new(loc, PatternKind::Atom(AtomKind::Wildcard)),
+                Located::new(loc, TypeKind::unit()),
+            )];
         }
 
         Self {

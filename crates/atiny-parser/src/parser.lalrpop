@@ -25,6 +25,7 @@ Sep<U, T>: Vec<T> = {
 
 
 ExprAtomItem: AtomKind<Expr> = {
+    "_"                => AtomKind::Wildcard,
     <n:Num>            => AtomKind::Number(n),
     <id: Id>           => AtomKind::Identifier(id),
     "(" <mut vec:Sep<",", Expr>> ")" => {
@@ -71,6 +72,7 @@ pub Expr : Expr = {
 };
 
 PatAtomItem: AtomKind<Pattern> = {
+    "_"                => AtomKind::Wildcard,
     <n:Num>            => AtomKind::Number(n),
     <id: Id>           => AtomKind::Identifier(id),
     "(" <mut vec:Sep<",", Pattern>> ")" => {
@@ -153,8 +155,8 @@ TypeAnotation : TypeNode = {
     ":" <typ: TypeNode> => typ
 }
 
-Param : (String, TypeNode) = {
-    "(" <name: Id> <typ: TypeAnotation> ")" => (name, typ)
+Param : (Pattern, TypeNode) = {
+    "(" <pat:Pattern> <typ: TypeAnotation> ")" => (pat, typ)
 }
 
 FnDecl : FnDecl = {
@@ -178,4 +180,7 @@ pub Program : Vec<TopLevel> = {
 }
 
 Num: u64 = <s:r"[0-9]+">                   => u64::from_str(s).unwrap();
-Id: String = <s:r"[a-zA-Z_][a-zA-Z0-9_]*"> => s.to_string();
+Id: String =  {
+    <s:r"[a-zA-Z]">               => s.to_string(),
+    <s:r"[a-zA-Z_][a-zA-Z0-9_]+"> => s.to_string(),
+}
