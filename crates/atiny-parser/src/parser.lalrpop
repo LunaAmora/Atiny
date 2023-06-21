@@ -19,10 +19,7 @@ Sep<U, T>: Vec<T> = {
     }
 };
 
-
-
 // For expressions
-
 
 ExprAtomItem: AtomKind<Expr> = {
     "_"                => AtomKind::Wildcard,
@@ -143,8 +140,17 @@ Constructor : Constructor = {
     "|" <name: Id> <types: TypeAtom*> => Constructor { name, types } 
 }
 
+Field: Field = {
+    <name: Id> ":" <ty: TypeNode> => Field { name, ty }
+}
+
+TypeDeclKind : TypeDeclKind = {
+    <constructors: Constructor+> => TypeDeclKind::Sum(constructors),
+    "{" <fields: Sep<",", Field>> "}" => TypeDeclKind::Product(fields)
+}
+
 TypeDecl : TypeDecl = {
-    "type" <name: Id> <params: Id*> "=" <constructors: Constructor*> => TypeDecl {
+    "type" <name: Id> <params: Id*> "=" <constructors: TypeDeclKind> => TypeDecl {
         name,
         params,
         constructors

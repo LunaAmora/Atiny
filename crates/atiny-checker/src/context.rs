@@ -14,6 +14,7 @@ use super::types::*;
 pub struct Signatures {
     pub types: im_rc::OrdMap<String, TypeSignature>,
     pub values: im_rc::OrdMap<String, DeclSignature>,
+    pub fields: im_rc::OrdMap<String, im_rc::OrdSet<String>>,
 }
 
 impl Display for Signatures {

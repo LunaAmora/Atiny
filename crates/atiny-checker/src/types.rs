@@ -410,6 +410,7 @@ impl Display for DeclSignature {
 #[derive(Clone, Debug)]
 pub enum TypeValue {
     Sum(Vec<Rc<ConstructorSignature>>),
+    Record(Vec<(String, Rc<TypeScheme>)>),
     Opaque,
 }
 
@@ -444,6 +445,7 @@ impl TypeSignature {
                     .collect::<HashSet<_>>(),
             ),
             TypeValue::Opaque => None,
+            TypeValue::Record(_) => todo!(),
         }
     }
 }
@@ -454,6 +456,13 @@ impl Display for TypeValue {
             Self::Sum(constructors) => {
                 let constructors = constructors.iter().join("\n        ");
                 write!(f, "{}", constructors)
+            }
+            Self::Record(fields) => {
+                let fields = fields
+                    .iter()
+                    .map(|(name, typ)| format!("{} : {}", name, typ))
+                    .join("\n        ");
+                write!(f, "{{ {} }}", fields)
             }
             Self::Opaque => write!(f, "opaque"),
         }

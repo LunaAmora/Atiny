@@ -204,6 +204,7 @@ impl Display for TypeTupleNode {
     }
 }
 
+/// The representation of a type in the AST.
 #[derive(Debug)]
 pub enum TypeKind {
     Arrow(ArrowNode),
@@ -251,12 +252,23 @@ impl Display for Constructor {
         )
     }
 }
+#[derive(Debug)]
+pub struct Field {
+    pub name: String,
+    pub ty: TypeNode,
+}
+
+#[derive(Debug)]
+pub enum TypeDeclKind {
+    Sum(Vec<Constructor>),
+    Product(Vec<Field>),
+}
 
 #[derive(Debug)]
 pub struct TypeDecl {
     pub name: String,
     pub params: Vec<String>,
-    pub constructors: Vec<Constructor>,
+    pub constructors: TypeDeclKind,
 }
 
 impl TypeDecl {
@@ -264,10 +276,10 @@ impl TypeDecl {
         Self {
             name: "()".to_string(),
             params: Vec::new(),
-            constructors: vec![Constructor {
+            constructors: TypeDeclKind::Sum(vec![Constructor {
                 name: "()".to_string(),
                 types: Vec::new(),
-            }],
+            }]),
         }
     }
 }
@@ -275,8 +287,26 @@ impl TypeDecl {
 impl Display for TypeDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let params = self.params.iter().map(|x| format!(" {x}")).join("");
-        let constructors = self.constructors.iter().join("");
-        write!(f, "(type {}{} = {})", self.name, params, constructors)
+
+        match &self.constructors {
+            TypeDeclKind::Sum(constructors) => write!(
+                f,
+                "(type {name}{params} (sum {constructors}))",
+                name = self.name,
+                params = params,
+                constructors = constructors.iter().join(" ")
+            ),
+            TypeDeclKind::Product(fields) => write!(
+                f,
+                "(type {name}{params} (product {fields}))",
+                name = self.name,
+                params = params,
+                fields = fields
+                    .iter()
+                    .map(|x| format!("({} : {})", x.name, x.ty))
+                    .join(" ")
+            ),
+        }
     }
 }
 

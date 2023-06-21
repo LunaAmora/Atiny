@@ -8,9 +8,7 @@ impl Ctx {
         let constr_list: Vec<_> = iter.map(|type_decl| type_decl.infer(self)).collect();
 
         for (decl_name, constructors) in constr_list {
-            for constructor in constructors {
-                (decl_name.as_str(), constructor).infer(self);
-            }
+            (decl_name.as_str(), constructors).infer(self);
         }
     }
 
@@ -38,7 +36,7 @@ impl<'a> Infer<'a> for Vec<TopLevel> {
 
 impl<'a> Infer<'a> for TypeDecl {
     type Context = &'a mut Ctx;
-    type Return = (String, Vec<Constructor>);
+    type Return = (String, TypeDeclKind);
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
         let type_sig = TypeSignature {
@@ -50,6 +48,69 @@ impl<'a> Infer<'a> for TypeDecl {
         ctx.signatures.types.insert(self.name.clone(), type_sig);
 
         (self.name, self.constructors)
+    }
+}
+
+impl<'a> Infer<'a> for (&str, TypeDeclKind) {
+    type Context = &'a mut Ctx;
+    type Return = ();
+
+    fn infer(self, ctx: Self::Context) -> Self::Return {
+        let (decl_name, kind) = self;
+
+        match kind {
+            TypeDeclKind::Sum(constructors) => {
+                for constructor in constructors {
+                    (decl_name, constructor).infer(ctx);
+                }
+            }
+            TypeDeclKind::Product(fields) => {
+                for field in fields {
+                    (decl_name, field).infer(ctx);
+                }
+            }
+        }
+    }
+}
+
+impl<'a> Infer<'a> for (&str, Field) {
+    type Context = &'a mut Ctx;
+    type Return = ();
+
+    fn infer(self, ctx: Self::Context) -> Self::Return {
+        let (decl_name, field) = self;
+
+        let Some(TypeSignature { params, .. }) = &ctx.signatures.types.get(decl_name) else {
+            panic!("The String should be a valid type signature name on the Ctx");
+        };
+
+        let application = Rc::new(MonoType::Application(
+            decl_name.to_string(),
+            params.iter().cloned().map(MonoType::var).collect(),
+        ));
+
+        let new_ctx = ctx.extend_types(params);
+
+        let mono = field.ty.infer(new_ctx);
+
+        let names = params.clone();
+        let sig_value = &mut ctx.signatures.types.get_mut(decl_name).unwrap().value;
+
+        if let TypeValue::Record(ref mut rec) = sig_value {
+            rec.push((
+                field.name.clone(),
+                Rc::new(TypeScheme {
+                    names,
+                    mono: MonoType::arrow(application, mono),
+                }),
+            ));
+        }
+
+        ctx.signatures
+            .fields
+            .entry(field.name)
+            .or_default()
+            .insert(decl_name.to_string());
     }
 }
 
