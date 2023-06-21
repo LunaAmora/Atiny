@@ -69,7 +69,7 @@ impl Range {
 
 impl Display for Point {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.line, self.column)
+        write!(f, "{}:{}", self.line + 1, self.column + 1)
     }
 }
 

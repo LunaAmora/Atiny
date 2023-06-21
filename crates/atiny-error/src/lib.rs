@@ -1,7 +1,7 @@
 use core::fmt;
 use std::fmt::Display;
 
-use atiny_location::ByteRange;
+use atiny_location::{ByteRange, Point, Range};
 
 pub enum ErrorKind {
     Static(String),
@@ -62,48 +62,46 @@ pub struct ErrorWithCode<'a> {
 
 impl<'a> Display for ErrorWithCode<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let location = self.err.location.locate(self.code);
+        let Self {
+            err: Error { message, location },
+            code,
+            file_name,
+        } = self;
 
-        let is_sugestion = matches!(self.err.message, ErrorKind::Sugestion(_));
-        let pad = 3;
+        let Range(start @ Point { line, column }, end) = location.locate(code);
+        const PAD: usize = 3;
 
-        if !is_sugestion {
-            writeln!(
-                f,
-                "\n[error]: {message}\n{:>pad$} ┌─> {file_name}:{line}:{column}\n{:>pad$} │",
-                "",
-                "",
-                message = self.err.message,
-                file_name = self.file_name,
-                line = location.0.line + 1,
-                column = location.0.column + 1
-            )?;
-        }
-        let code = self.code.lines().collect::<Vec<_>>();
-        let lines = code[location.0.line..=location.1.line].to_vec();
+        let print_lines = |f: &mut fmt::Formatter<'_>| -> fmt::Result {
+            for (line, line_number) in code.lines().skip(line).zip(line..=end.line) {
+                writeln!(f, "{:>PAD$} │{}", line_number + 1, line)?;
+            }
+            Ok(())
+        };
 
-        let inline = location.0.line == location.1.line;
-        let idx = location.1.line - location.0.line;
+        match message {
+            ErrorKind::Sugestion(sugestion) => {
+                print_lines(f)?;
 
-        for (i, line) in lines.iter().enumerate() {
-            let line_n = location.0.line + i + 1;
-            writeln!(f, "{:>pad$} │{}", line_n, line)?;
-
-            let indent = location.0.column;
-
-            if !is_sugestion && inline && i == idx {
-                let size = location.1.column - location.0.column;
-                writeln!(f, "{:>pad$} │{: >indent$}{:^>size$}", "", "", "")?;
+                let sugestion = sugestion.to_string();
+                let size = sugestion.len();
+                writeln!(f, "{:>PAD$} │{:>column$}{sugestion}", end.line + 2, "")?;
+                writeln!(f, "{:>PAD$} │{:>column$}{:+>size$}", "", "", "")?;
             }
 
-            if is_sugestion {
-                let message = self.err.message.to_string();
-                let size = message.len();
-                writeln!(f, "{:>pad$} │{:>indent$}{}", line_n + 1, "", message)?;
-                writeln!(f, "{:>pad$} │{:>indent$}{:+>size$}", "", "", "")?;
-            }
-        }
+            error => {
+                writeln!(f, "\n[error]: {error}\n")?;
+                writeln!(f, "{:>PAD$} ┌─> {file_name}:{start}", "")?;
+                writeln!(f, "{:>PAD$} │", "",)?;
 
-        Ok(())
+                print_lines(f)?;
+
+                if line == end.line {
+                    let size = end.column - column;
+                    writeln!(f, "{:>PAD$} │{:>column$}{:^>size$}", "", "", "")?;
+                }
+            }
+        };
+
+        writeln!(f, "{:>PAD$} │", "")
     }
 }

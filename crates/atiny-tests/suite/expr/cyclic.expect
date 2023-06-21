@@ -1,6 +1,8 @@
 
 [error]: found cyclic type of infinite size
+
     ┌─> cyclic.at:3:5
     │
   3 │    (c, d) => c
     │    ^^^^^^
+    │

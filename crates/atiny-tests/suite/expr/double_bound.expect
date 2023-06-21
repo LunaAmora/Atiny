@@ -1,6 +1,8 @@
 
 [error]: identifier 'b' bound more than once
+
     ┌─> double_bound.at:2:9
     │
   2 │    (b, b) => b,
     │        ^
+    │

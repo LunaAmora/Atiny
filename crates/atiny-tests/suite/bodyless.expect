@@ -1,7 +1,9 @@
 
 [error]: type mismatch between '()' and 'Int'
+
     ┌─> bodyless.at:13:16
     │
  13 │fn main4 : Int {
  14 │
  15 │}
+    │
