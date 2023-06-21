@@ -1,6 +1,27 @@
 use crate::{check::Check, context::Ctx, infer::Infer, types::*};
 use atiny_tree::{elaborated::FnBody, r#abstract::*};
+use itertools::Itertools;
 use std::{collections::HashSet, rc::Rc};
+
+impl Ctx {
+    pub fn extend_type_sigs<T: Iterator<Item = TypeDecl>>(&mut self, iter: T) {
+        let constr_list: Vec<_> = iter.map(|type_decl| type_decl.infer(self)).collect();
+
+        for (decl_name, constructors) in constr_list {
+            for constructor in constructors {
+                (decl_name.as_str(), constructor).infer(self);
+            }
+        }
+    }
+
+    pub fn extend_fun_sigs<T: Iterator<Item = FnDecl>>(&mut self, iter: T) -> Vec<FnBody<Type>> {
+        iter.map(|fun_decl| fun_decl.infer(self))
+            .collect_vec()
+            .into_iter()
+            .map(|body| body.infer(self))
+            .collect()
+    }
+}
 
 impl<'a> Infer<'a> for Vec<TopLevel> {
     type Context = &'a mut Ctx;
@@ -10,22 +31,8 @@ impl<'a> Infer<'a> for Vec<TopLevel> {
         let mut fn_vec = Vec::new();
         let top_iter = TopIter::new(self, &mut fn_vec);
 
-        let constr_list: Vec<_> = top_iter.map(|type_decl| type_decl.infer(ctx)).collect();
-
-        for (decl_name, constructors) in constr_list {
-            for constructor in constructors {
-                (decl_name.as_str(), constructor).infer(ctx);
-            }
-        }
-
-        let mut bodies = Vec::new();
-
-        fn_vec
-            .into_iter()
-            .filter_map(|fun_decl| fun_decl.infer(ctx))
-            .for_each(|body| bodies.push(body));
-
-        bodies.into_iter().map(|body| body.infer(ctx)).collect()
+        ctx.extend_type_sigs(top_iter);
+        ctx.extend_fun_sigs(fn_vec.into_iter())
     }
 }
 
@@ -91,7 +98,7 @@ impl<'a> Infer<'a> for (&str, Constructor) {
 
 impl<'a> Infer<'a> for FnDecl {
     type Context = &'a mut Ctx;
-    type Return = Option<(String, Expr)>;
+    type Return = (String, Expr);
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
         let mut set = HashSet::new();
@@ -123,7 +130,7 @@ impl<'a> Infer<'a> for FnDecl {
 
         ctx.signatures.values.insert(self.name.clone(), sig);
 
-        self.body.map(|body| (self.name, body))
+        (self.name, self.body)
     }
 }
 

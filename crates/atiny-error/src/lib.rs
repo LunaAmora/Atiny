@@ -90,9 +90,9 @@ impl<'a> Display for ErrorWithCode<'a> {
             writeln!(f, "{:>pad$} │{}", line_n, line)?;
 
             let indent = location.0.column;
-            let size = location.1.column - location.0.column;
 
             if !is_sugestion && inline && i == idx {
+                let size = location.1.column - location.0.column;
                 writeln!(f, "{:>pad$} │{: >indent$}{:^>size$}", "", "", "")?;
             }
 

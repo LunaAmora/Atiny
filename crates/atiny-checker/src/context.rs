@@ -1,10 +1,11 @@
 //! The context is primarily a list of bindings from variable names to type that is on the left side
 //! of a type judgment.
 
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{cell::RefCell, fmt::Display, iter, rc::Rc};
 
 use atiny_error::Error;
 use atiny_location::ByteRange;
+use atiny_tree::r#abstract::TypeDecl;
 use itertools::Itertools;
 
 use super::types::*;
@@ -47,12 +48,10 @@ impl Default for Ctx {
 
         ctx.signatures.types.insert(
             "Int".to_string(),
-            TypeSignature {
-                name: "Int".to_string(),
-                params: vec![],
-                value: TypeValue::Opaque,
-            },
+            TypeSignature::new_opaque("Int".to_string()),
         );
+
+        ctx.extend_type_sigs(iter::once(TypeDecl::unit()));
 
         ctx
     }

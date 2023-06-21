@@ -426,6 +426,14 @@ pub struct TypeSignature {
 }
 
 impl TypeSignature {
+    pub fn new_opaque(name: String) -> Self {
+        Self {
+            name,
+            params: Vec::new(),
+            value: TypeValue::Opaque,
+        }
+    }
+
     pub fn get_constructors(&self) -> Option<HashSet<String>> {
         match &self.value {
             TypeValue::Sum(constructors) => Some(
