@@ -10,6 +10,7 @@ use std::{
     rc::Rc,
 };
 
+use atiny_tree::r#abstract::Pattern;
 use itertools::Itertools;
 
 use super::context::Ctx;
@@ -363,7 +364,7 @@ impl ConstructorSignature {
 #[derive(Clone, Debug)]
 pub struct FunctionSignature {
     pub name: String,
-    pub args: Vec<(String, Type)>,
+    pub args: Vec<(Pattern, Type)>,
     pub entire_type: Rc<TypeScheme>,
 }
 

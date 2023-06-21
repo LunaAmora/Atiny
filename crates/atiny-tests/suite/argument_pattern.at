@@ -1,0 +1,7 @@
+type Bool = | true | false
+type Box t = | Boxed t
+type DoubleBox t v = | DBox t v
+
+fn unbox (Boxed (DBox a b) : Box (DoubleBox Int Bool)) : (Bool, Int) {
+    (b, a)
+}

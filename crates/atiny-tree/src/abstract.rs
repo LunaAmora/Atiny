@@ -283,7 +283,7 @@ impl Display for TypeDecl {
 #[derive(Debug)]
 pub struct FnDecl {
     pub name: String,
-    pub params: Vec<(String, TypeNode)>,
+    pub params: Vec<(Pattern, TypeNode)>,
     pub ret: TypeNode,
     pub body: Expr,
 }
@@ -291,13 +291,16 @@ pub struct FnDecl {
 impl FnDecl {
     pub fn new(
         name: Located<String>,
-        mut params: Vec<(String, TypeNode)>,
+        mut params: Vec<(Pattern, TypeNode)>,
         ret: Option<TypeNode>,
         body: Expr,
     ) -> Self {
         let loc = name.location;
         if params.is_empty() {
-            params = vec![("_".to_owned(), Located::new(loc, TypeKind::unit()))];
+            params = vec![(
+                Located::new(loc, PatternKind::Atom(AtomKind::Wildcard)),
+                Located::new(loc, TypeKind::unit()),
+            )];
         }
 
         Self {
