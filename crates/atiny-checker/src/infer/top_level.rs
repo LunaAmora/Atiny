@@ -1,15 +1,14 @@
 use crate::{check::Check, context::Ctx, exhaustive::Problem, infer::Infer, types::*};
 use atiny_tree::{elaborated::FnBody, r#abstract::*};
 use itertools::Itertools;
-use std::{collections::HashSet, rc::Rc};
+use std::{collections::HashSet, iter, rc::Rc};
 
 impl Ctx {
     pub fn extend_type_sigs<T: Iterator<Item = TypeDecl>>(&mut self, iter: T) {
-        let constr_list: Vec<_> = iter.map(|type_decl| type_decl.infer(self)).collect();
-
-        for (decl_name, constructors) in constr_list {
-            (decl_name.as_str(), constructors).infer(self);
-        }
+        iter.map(|type_decl| type_decl.infer(self))
+            .collect_vec()
+            .into_iter()
+            .for_each(|constr| constr.infer(self));
     }
 
     pub fn extend_fun_sigs<T: Iterator<Item = FnDecl>>(&mut self, iter: T) -> Vec<FnBody<Type>> {
@@ -51,24 +50,17 @@ impl<'a> Infer<'a> for TypeDecl {
     }
 }
 
-impl<'a> Infer<'a> for (&str, TypeDeclKind) {
+impl<'a> Infer<'a> for (String, TypeDeclKind) {
     type Context = &'a mut Ctx;
     type Return = ();
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
         let (decl_name, kind) = self;
+        let name = iter::repeat(decl_name.as_str());
 
         match kind {
-            TypeDeclKind::Sum(constructors) => {
-                for constructor in constructors {
-                    (decl_name, constructor).infer(ctx);
-                }
-            }
-            TypeDeclKind::Product(fields) => {
-                for field in fields {
-                    (decl_name, field).infer(ctx);
-                }
-            }
+            TypeDeclKind::Sum(constrs) => name.zip(constrs).for_each(|constr| constr.infer(ctx)),
+            TypeDeclKind::Product(fields) => name.zip(fields).for_each(|field| field.infer(ctx)),
         }
     }
 }
