@@ -410,7 +410,7 @@ impl Display for DeclSignature {
 #[derive(Clone, Debug)]
 pub enum TypeValue {
     Sum(Vec<Rc<ConstructorSignature>>),
-    Record(Vec<(String, Rc<TypeScheme>)>),
+    Product(Vec<(String, Rc<MonoType>)>),
     Opaque,
 }
 
@@ -428,6 +428,13 @@ pub struct TypeSignature {
 }
 
 impl TypeSignature {
+    pub fn application(&self) -> Type {
+        Rc::new(MonoType::Application(
+            self.name.to_string(),
+            self.params.iter().cloned().map(MonoType::var).collect(),
+        ))
+    }
+
     pub fn new_opaque(name: String) -> Self {
         Self {
             name,
@@ -445,7 +452,7 @@ impl TypeSignature {
                     .collect::<HashSet<_>>(),
             ),
             TypeValue::Opaque => None,
-            TypeValue::Record(_) => todo!(),
+            TypeValue::Product(_) => todo!(),
         }
     }
 }
@@ -457,7 +464,7 @@ impl Display for TypeValue {
                 let constructors = constructors.iter().join("\n        ");
                 write!(f, "{}", constructors)
             }
-            Self::Record(fields) => {
+            Self::Product(fields) => {
                 let fields = fields
                     .iter()
                     .map(|(name, typ)| format!("{} : {}", name, typ))

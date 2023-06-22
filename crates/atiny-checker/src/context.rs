@@ -149,7 +149,7 @@ impl Ctx {
             .push(Error::new(msg, self.location));
     }
 
-    pub fn sugestion(&self, msg: String) {
+    pub fn suggestion(&self, msg: String) {
         self.errors
             .borrow_mut()
             .push(Error::new_sugestion(msg, self.location));

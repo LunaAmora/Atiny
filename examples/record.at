@@ -1,0 +1,13 @@
+type String = | Str
+
+type User a = {
+    name: a,
+    age: a
+}
+
+fn main : User Int {
+    User #{
+        name = 3,
+        age = 2
+    }
+}

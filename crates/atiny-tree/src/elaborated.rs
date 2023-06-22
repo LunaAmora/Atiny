@@ -25,6 +25,8 @@ pub enum Expr<T> {
 
     Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
 
+    RecordCreation(Symbol, Vec<(Symbol, Expr<T>)>),
+
     Error,
 }
 

@@ -38,10 +38,15 @@ impl<'a> Infer<'a> for TypeDecl {
     type Return = (String, TypeDeclKind);
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
+        let value = match self.constructors {
+            TypeDeclKind::Sum(_) => TypeValue::Sum(Vec::new()),
+            TypeDeclKind::Product(_) => TypeValue::Product(Vec::new()),
+        };
+
         let type_sig = TypeSignature {
             name: self.name.clone(),
             params: self.params.clone(),
-            value: TypeValue::Sum(Vec::new()),
+            value,
         };
 
         ctx.signatures.types.insert(self.name.clone(), type_sig);
@@ -76,26 +81,14 @@ impl<'a> Infer<'a> for (&str, Field) {
             panic!("The String should be a valid type signature name on the Ctx");
         };
 
-        let application = Rc::new(MonoType::Application(
-            decl_name.to_string(),
-            params.iter().cloned().map(MonoType::var).collect(),
-        ));
-
         let new_ctx = ctx.extend_types(params);
 
         let mono = field.ty.infer(new_ctx);
 
-        let names = params.clone();
         let sig_value = &mut ctx.signatures.types.get_mut(decl_name).unwrap().value;
 
-        if let TypeValue::Record(ref mut rec) = sig_value {
-            rec.push((
-                field.name.clone(),
-                Rc::new(TypeScheme {
-                    names,
-                    mono: MonoType::arrow(application, mono),
-                }),
-            ));
+        if let TypeValue::Product(ref mut rec) = sig_value {
+            rec.push((field.name.clone(), mono));
         }
 
         ctx.signatures

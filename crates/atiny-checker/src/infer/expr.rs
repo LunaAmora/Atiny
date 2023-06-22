@@ -7,7 +7,7 @@ use crate::{context::Ctx, types::*, unify::unify};
 
 use atiny_tree::elaborated::{self, CaseTree, Symbol, VariableNode};
 use atiny_tree::r#abstract::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 type Elaborated = elaborated::Expr<Type>;
 
@@ -112,7 +112,7 @@ impl Infer<'_> for &Expr {
             Match(e, clauses) => {
                 let err_count = ctx.err_count();
 
-                let (pat_ty, scrutinee) = e.infer(ctx.clone());
+                let (pat_ty, scrutineer) = e.infer(ctx.clone());
                 let ret_ty = ctx.new_hole();
 
                 let mut places = Vec::new();
@@ -168,10 +168,12 @@ impl Infer<'_> for &Expr {
                             ctx.error(format!("non-exhaustive pattern match: {}", err));
 
                             ctx.location = last_pat_loc;
-                            ctx.sugestion(format!("{} => _,", err));
+                            ctx.suggestion(format!("{} => _,", err));
                             Elaborated::Error
                         },
-                        |tree| Elaborated::CaseTree(Box::new(scrutinee), CaseTree { tree, places }),
+                        |tree| {
+                            Elaborated::CaseTree(Box::new(scrutineer), CaseTree { tree, places })
+                        },
                     )
                 } else {
                     Elaborated::Error
@@ -185,6 +187,75 @@ impl Infer<'_> for &Expr {
                 let elab = expr.check(ctx, typ_res.clone());
                 (typ_res, elab)
             }
+            RecordCreation(expr, user_fields) => match &expr.data {
+                Atom(AtomKind::Identifier(name)) if ctx.lookup_type(name).is_some() => {
+                    let ctx = ctx.set_position(expr.location);
+                    let typ = ctx.lookup_type(name).unwrap();
+
+                    let mut elab_fields = vec![];
+
+                    let (ret_type, vars) = TypeScheme {
+                        names: typ.params.clone(),
+                        mono: typ.application(),
+                    }
+                    .instantiate(ctx.clone());
+
+                    if let TypeValue::Product(fields) = &typ.value {
+                        let fields_map: HashMap<_, _> = fields.iter().cloned().collect();
+                        let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
+
+                        for user_field in user_fields {
+                            let field_name = user_field.name.clone();
+                            let (field_ty, field_expr) = user_field.expr.infer(ctx.clone());
+                            if fields_map.contains_key(&field_name) {
+                                if fields_to_remove.contains(&field_name) {
+                                    let ctx = ctx.set_position(user_field.expr.location);
+
+                                    fields_to_remove.remove(&field_name);
+
+                                    let field = fields_map.get(&field_name).unwrap();
+
+                                    let field = TypeScheme {
+                                        names: typ.params.clone(),
+                                        mono: field.clone(),
+                                    }
+                                    .instantiate_with(&vars);
+
+                                    unify(ctx.clone(), field_ty, field.clone());
+
+                                    elab_fields.push((Symbol(field_name), field_expr));
+                                } else {
+                                    ctx.error(format!("field '{}' is duplicated", field_name));
+                                    return (MonoType::Error.into(), Elaborated::Error);
+                                }
+                            } else {
+                                ctx.error(format!(
+                                    "field '{}' does not exist in type '{}'",
+                                    field_name, name
+                                ));
+                                return (MonoType::Error.into(), Elaborated::Error);
+                            }
+                        }
+
+                        (
+                            ret_type,
+                            Elaborated::RecordCreation(
+                                Symbol(name.to_owned()),
+                                std::mem::take(&mut elab_fields),
+                            ),
+                        )
+                    } else {
+                        println!("{}", typ);
+                        ctx.error("the type is not a record.".to_string());
+                        (MonoType::Error.into(), Elaborated::Error)
+                    }
+                }
+                _ => {
+                    let _expr_ty = expr.infer(ctx);
+                    todo!()
+                }
+            },
+            Field(_, _) => todo!(),
         }
     }
 }
