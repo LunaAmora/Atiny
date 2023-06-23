@@ -2,6 +2,7 @@
 
 use super::Infer;
 use crate::check::Check;
+use crate::context::InferError;
 use crate::exhaustive::Problem;
 use crate::{context::Ctx, types::*, unify::unify};
 
@@ -10,6 +11,7 @@ use atiny_tree::r#abstract::*;
 
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 type Elaborated = elaborated::Expr<Type>;
 
@@ -24,10 +26,7 @@ impl Infer<'_> for &Expr {
 
         match &self.data {
             Atom(a) => match a {
-                Wildcard => (
-                    ctx.new_error("`_` may only appear on patterns".to_string()),
-                    Elaborated::Error,
-                ),
+                Wildcard => ctx.new_error("`_` may only appear on patterns".to_string()),
 
                 Number(n) => (MonoType::typ("Int".to_string()), Elaborated::Number(*n)),
 
@@ -48,10 +47,7 @@ impl Infer<'_> for &Expr {
                         (inst, Elaborated::Variable(variable_node))
                     }
 
-                    None => (
-                        ctx.new_error(format!("unbound variable '{}'", x)),
-                        Elaborated::Error,
-                    ),
+                    None => ctx.new_error(format!("unbound variable '{}'", x)),
                 },
 
                 Group(expr) => expr.infer(ctx),
@@ -189,33 +185,35 @@ impl Infer<'_> for &Expr {
                 let elab = expr.check(ctx, typ_res.clone());
                 (typ_res, elab)
             }
+
             RecordCreation(expr, user_fields) => match &expr.data {
                 Atom(AtomKind::Identifier(name)) if ctx.lookup_type(name).is_some() => {
                     let ctx = ctx.set_position(expr.location);
                     let typ = ctx.lookup_type(name).unwrap();
 
-                    let mut elab_fields = vec![];
-
-                    let (ret_type, vars) = TypeScheme {
-                        names: typ.params.clone(),
-                        mono: typ.application(),
-                    }
-                    .instantiate(ctx.clone());
-
                     if let TypeValue::Product(fields) = &typ.value {
-                        let fields_map: HashMap<_, _> = fields.iter().cloned().collect();
+                        let mut elab_fields = vec![];
+
+                        let (ret_type, vars) = TypeScheme {
+                            names: typ.params.clone(),
+                            mono: typ.application(),
+                        }
+                        .instantiate(ctx.clone());
+
+                        let fields_map: HashMap<_, _> =
+                            fields.iter().map(|(s, t)| (s, t)).collect();
                         let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
 
-                        for user_field in user_fields {
-                            let field_name = user_field.name.clone();
-                            let (field_ty, field_expr) = user_field.expr.infer(ctx.clone());
-                            if fields_map.contains_key(&field_name) {
-                                if fields_to_remove.contains(&field_name) {
-                                    let ctx = ctx.set_position(user_field.expr.location);
+                        for ExprField { name, expr } in user_fields {
+                            let (field_ty, field_expr) = expr.infer(ctx.clone());
 
-                                    fields_to_remove.remove(&field_name);
+                            if fields_map.contains_key(name) {
+                                if fields_to_remove.contains(&name) {
+                                    let ctx = ctx.set_position(expr.location);
 
-                                    let field = fields_map.get(&field_name).unwrap();
+                                    fields_to_remove.remove(&name);
+
+                                    let field = *fields_map.get(name).unwrap();
 
                                     let field = TypeScheme {
                                         names: typ.params.clone(),
@@ -225,17 +223,14 @@ impl Infer<'_> for &Expr {
 
                                     unify(ctx.clone(), field_ty, field.clone());
 
-                                    elab_fields.push((Symbol(field_name), field_expr));
+                                    elab_fields.push((Symbol(name.to_owned()), field_expr));
                                 } else {
-                                    ctx.error(format!("field '{}' is duplicated", field_name));
-                                    return (MonoType::Error.into(), Elaborated::Error);
+                                    return ctx.new_error(format!("field '{name}' is duplicated"));
                                 }
                             } else {
-                                ctx.error(format!(
-                                    "field '{}' does not exist in type '{}'",
-                                    field_name, name
+                                return ctx.new_error(format!(
+                                    "field '{name}' does not exist in type '{name}'"
                                 ));
-                                return (MonoType::Error.into(), Elaborated::Error);
                             }
                         }
 
@@ -246,36 +241,33 @@ impl Infer<'_> for &Expr {
                             ));
                         }
 
-                        (
-                            ret_type,
-                            Elaborated::RecordCreation(
-                                Symbol(name.to_owned()),
-                                std::mem::take(&mut elab_fields),
-                            ),
-                        )
+                        let record_creation = Elaborated::RecordCreation(
+                            Symbol(name.to_owned()),
+                            std::mem::take(&mut elab_fields),
+                        );
+
+                        (ret_type, record_creation)
                     } else {
-                        println!("{}", typ);
-                        ctx.error("the type is not a record.".to_string());
-                        (MonoType::Error.into(), Elaborated::Error)
+                        ctx.new_error(format!("the type '{typ}' is not a record"))
                     }
                 }
+
                 _ => {
                     let (expr_ty, elab_expr) = expr.infer(ctx.clone());
                     let constructor = expr_ty.get_constructor();
 
-                    let Some(type_signature) = constructor.clone().and_then(|name| ctx.lookup_type(&name)) else {
-                        ctx.error(format!("the type '{}' is not a record", expr_ty));
-                        return (MonoType::Error.into(), Elaborated::Error)
-                    };
-
-                    let TypeValue::Product(fields) = &type_signature.value else {
-                        ctx.error(format!("the type '{}' is not a record", expr_ty));
-                        return (MonoType::Error.into(), Elaborated::Error)
+                    let Some(
+                        type_signature @ TypeSignature {
+                            value: TypeValue::Product(fields),
+                            ..
+                        },
+                    ) = constructor.as_ref().and_then(|name| ctx.lookup_type(name)) else {
+                        return ctx.new_error(format!("the type '{expr_ty}' is not a record"));
                     };
 
                     let mut elab_fields = vec![];
 
-                    let fields_map: HashMap<_, _> = fields.iter().cloned().collect();
+                    let fields_map: HashMap<_, _> = fields.iter().map(|(s, t)| (s, t)).collect();
                     let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
 
                     let (ret_type, vars) = TypeScheme {
@@ -286,16 +278,16 @@ impl Infer<'_> for &Expr {
 
                     unify(ctx.clone(), ret_type.clone(), expr_ty);
 
-                    for user_field in user_fields {
-                        let field_name = user_field.name.clone();
-                        let (field_ty, field_expr) = user_field.expr.infer(ctx.clone());
-                        if fields_map.contains_key(&field_name) {
-                            if fields_to_remove.contains(&field_name) {
-                                let ctx = ctx.set_position(user_field.expr.location);
+                    for ExprField { name, expr } in user_fields {
+                        let (field_ty, field_expr) = expr.infer(ctx.clone());
 
-                                fields_to_remove.remove(&field_name);
+                        if fields_map.contains_key(&name) {
+                            if fields_to_remove.contains(&name) {
+                                let ctx = ctx.set_position(expr.location);
 
-                                let field = fields_map.get(&field_name).unwrap();
+                                fields_to_remove.remove(&name);
+
+                                let field = *fields_map.get(&name).unwrap();
 
                                 let field = TypeScheme {
                                     names: type_signature.params.clone(),
@@ -305,51 +297,45 @@ impl Infer<'_> for &Expr {
 
                                 unify(ctx.clone(), field_ty, field.clone());
 
-                                elab_fields.push((Symbol(field_name), field_expr));
+                                elab_fields.push((Symbol(name.to_owned()), field_expr));
                             } else {
-                                ctx.error(format!("field '{}' is duplicated", field_name));
-                                return (MonoType::Error.into(), Elaborated::Error);
+                                return ctx.new_error(format!("field '{name}' is duplicated"));
                             }
                         } else {
-                            ctx.error(format!(
-                                "field '{}' does not exist in type '{}'",
-                                field_name,
+                            return ctx.new_error(format!(
+                                "field '{name}' does not exist in type '{}'",
                                 constructor.unwrap()
                             ));
-                            return (MonoType::Error.into(), Elaborated::Error);
                         }
                     }
 
-                    (
-                        ret_type,
-                        Elaborated::RecordUpdate(
-                            Box::new(elab_expr),
-                            std::mem::take(&mut elab_fields),
-                        ),
-                    )
+                    let record_update = Elaborated::RecordUpdate(
+                        Box::new(elab_expr),
+                        std::mem::take(&mut elab_fields),
+                    );
+
+                    (ret_type, record_update)
                 }
             },
+
             Field(expr, field) => {
                 let (expr_ty, elab_expr) = expr.infer(ctx.clone());
                 let constructor = expr_ty.get_constructor();
 
-                let Some(type_signature) = constructor.clone().and_then(|name| ctx.lookup_type(&name)) else {
-                    ctx.error(format!("the type '{}' is not a record", expr_ty));
-                    return (MonoType::Error.into(), Elaborated::Error)
-                };
-
-                let TypeValue::Product(fields) = &type_signature.value else {
-                    ctx.error(format!("the type '{}' is not a record", expr_ty));
-                    return (MonoType::Error.into(), Elaborated::Error)
+                let Some(
+                    type_signature @ TypeSignature {
+                        value: TypeValue::Product(fields),
+                        ..
+                    },
+                ) = constructor.as_ref().and_then(|name| ctx.lookup_type(name)) else {
+                    return ctx.new_error(format!("the type '{expr_ty}' is not a record"));
                 };
 
                 let Some((_, field_cons)) = fields.iter().find(|(name, _)| name == field) else {
-                    ctx.error(format!(
-                        "field '{}' does not exist in type '{}'",
-                        field,
+                    return ctx.new_error(format!(
+                        "field '{field}' does not exist in type '{}'",
                         constructor.unwrap()
-                    ));
-                    return (MonoType::Error.into(), Elaborated::Error)
+                    ))
                 };
 
                 let (ret_type, vars) = TypeScheme {
@@ -366,15 +352,21 @@ impl Infer<'_> for &Expr {
                 }
                 .instantiate_with(&vars);
 
-                (
-                    field_ty,
-                    Elaborated::RecordField(
-                        Symbol(constructor.unwrap()),
-                        Box::new(elab_expr),
-                        Symbol(field.clone()),
-                    ),
-                )
+                let record_field = Elaborated::RecordField(
+                    Symbol(constructor.unwrap()),
+                    Box::new(elab_expr),
+                    Symbol(field.clone()),
+                );
+
+                (field_ty, record_field)
             }
         }
+    }
+}
+
+impl InferError<(Rc<MonoType>, Elaborated)> for Ctx {
+    fn new_error(&self, msg: String) -> (Rc<MonoType>, Elaborated) {
+        self.error(msg);
+        (Rc::new(MonoType::Error), Elaborated::Error)
     }
 }

@@ -179,8 +179,14 @@ impl Ctx {
     pub fn new_hole(&self) -> Rc<MonoType> {
         MonoType::new_hole(self.new_name(), self.level)
     }
+}
 
-    pub fn new_error(&self, msg: String) -> Rc<MonoType> {
+pub trait InferError<T> {
+    fn new_error(&self, msg: String) -> T;
+}
+
+impl InferError<Rc<MonoType>> for Ctx {
+    fn new_error(&self, msg: String) -> Rc<MonoType> {
         self.error(msg);
         Rc::new(MonoType::Error)
     }
