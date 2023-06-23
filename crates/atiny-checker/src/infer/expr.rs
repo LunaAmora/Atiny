@@ -7,6 +7,8 @@ use crate::{context::Ctx, types::*, unify::unify};
 
 use atiny_tree::elaborated::{self, CaseTree, Symbol, VariableNode};
 use atiny_tree::r#abstract::*;
+
+use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 type Elaborated = elaborated::Expr<Type>;
@@ -237,6 +239,13 @@ impl Infer<'_> for &Expr {
                             }
                         }
 
+                        if !fields_to_remove.is_empty() && !fields_map.is_empty() {
+                            ctx.error(format!(
+                                "fields {} are missing",
+                                fields_to_remove.iter().join(", ")
+                            ));
+                        }
+
                         (
                             ret_type,
                             Elaborated::RecordCreation(
@@ -251,11 +260,121 @@ impl Infer<'_> for &Expr {
                     }
                 }
                 _ => {
-                    let _expr_ty = expr.infer(ctx);
-                    todo!()
+                    let (expr_ty, elab_expr) = expr.infer(ctx.clone());
+                    let constructor = expr_ty.get_constructor();
+
+                    let Some(type_signature) = constructor.clone().and_then(|name| ctx.lookup_type(&name)) else {
+                        ctx.error(format!("the type '{}' is not a record", expr_ty));
+                        return (MonoType::Error.into(), Elaborated::Error)
+                    };
+
+                    let TypeValue::Product(fields) = &type_signature.value else {
+                        ctx.error(format!("the type '{}' is not a record", expr_ty));
+                        return (MonoType::Error.into(), Elaborated::Error)
+                    };
+
+                    let mut elab_fields = vec![];
+
+                    let fields_map: HashMap<_, _> = fields.iter().cloned().collect();
+                    let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
+
+                    let (ret_type, vars) = TypeScheme {
+                        names: type_signature.params.clone(),
+                        mono: type_signature.application(),
+                    }
+                    .instantiate(ctx.clone());
+
+                    unify(ctx.clone(), ret_type.clone(), expr_ty);
+
+                    for user_field in user_fields {
+                        let field_name = user_field.name.clone();
+                        let (field_ty, field_expr) = user_field.expr.infer(ctx.clone());
+                        if fields_map.contains_key(&field_name) {
+                            if fields_to_remove.contains(&field_name) {
+                                let ctx = ctx.set_position(user_field.expr.location);
+
+                                fields_to_remove.remove(&field_name);
+
+                                let field = fields_map.get(&field_name).unwrap();
+
+                                let field = TypeScheme {
+                                    names: type_signature.params.clone(),
+                                    mono: field.clone(),
+                                }
+                                .instantiate_with(&vars);
+
+                                unify(ctx.clone(), field_ty, field.clone());
+
+                                elab_fields.push((Symbol(field_name), field_expr));
+                            } else {
+                                ctx.error(format!("field '{}' is duplicated", field_name));
+                                return (MonoType::Error.into(), Elaborated::Error);
+                            }
+                        } else {
+                            ctx.error(format!(
+                                "field '{}' does not exist in type '{}'",
+                                field_name,
+                                constructor.unwrap()
+                            ));
+                            return (MonoType::Error.into(), Elaborated::Error);
+                        }
+                    }
+
+                    (
+                        ret_type,
+                        Elaborated::RecordUpdate(
+                            Box::new(elab_expr),
+                            std::mem::take(&mut elab_fields),
+                        ),
+                    )
                 }
             },
-            Field(_, _) => todo!(),
+            Field(expr, field) => {
+                let (expr_ty, elab_expr) = expr.infer(ctx.clone());
+                let constructor = expr_ty.get_constructor();
+
+                let Some(type_signature) = constructor.clone().and_then(|name| ctx.lookup_type(&name)) else {
+                    ctx.error(format!("the type '{}' is not a record", expr_ty));
+                    return (MonoType::Error.into(), Elaborated::Error)
+                };
+
+                let TypeValue::Product(fields) = &type_signature.value else {
+                    ctx.error(format!("the type '{}' is not a record", expr_ty));
+                    return (MonoType::Error.into(), Elaborated::Error)
+                };
+
+                let Some((_, field_cons)) = fields.iter().find(|(name, _)| name == field) else {
+                    ctx.error(format!(
+                        "field '{}' does not exist in type '{}'",
+                        field,
+                        constructor.unwrap()
+                    ));
+                    return (MonoType::Error.into(), Elaborated::Error)
+                };
+
+                let (ret_type, vars) = TypeScheme {
+                    names: type_signature.params.clone(),
+                    mono: type_signature.application(),
+                }
+                .instantiate(ctx.clone());
+
+                unify(ctx.clone(), ret_type, expr_ty);
+
+                let field_ty = TypeScheme {
+                    names: type_signature.params.clone(),
+                    mono: field_cons.clone(),
+                }
+                .instantiate_with(&vars);
+
+                (
+                    field_ty,
+                    Elaborated::RecordField(
+                        Symbol(constructor.unwrap()),
+                        Box::new(elab_expr),
+                        Symbol(field.clone()),
+                    ),
+                )
+            }
         }
     }
 }

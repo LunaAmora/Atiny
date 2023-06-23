@@ -186,6 +186,13 @@ pub enum MonoType {
 }
 
 impl MonoType {
+    pub fn get_constructor(self: &Type) -> Option<String> {
+        match &**self {
+            Self::Application(s, _) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
     pub fn iter(self: Type) -> TypeIter {
         TypeIter { typ: self }
     }
