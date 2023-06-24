@@ -186,6 +186,7 @@ impl Infer<'_> for &Expr {
 
             RecordCreation(expr, user_fields) => match &expr.data {
                 Atom(AtomKind::Identifier(name)) if ctx.lookup_type(name).is_some() => {
+                    let err_count = ctx.err_count();
                     let ctx = ctx.set_position(expr.location);
                     let typ = ctx.lookup_type(name).unwrap();
 
@@ -239,21 +240,20 @@ impl Infer<'_> for &Expr {
                             ));
                         }
 
-                        let record_creation = Elaborated::RecordCreation(
-                            Symbol(name.to_owned()),
-                            std::mem::take(&mut elab_fields),
-                        );
+                        let elaborated = if err_count != ctx.err_count() {
+                            Elaborated::Error
+                        } else {
+                            Elaborated::RecordCreation(Symbol(name.to_owned()), elab_fields)
+                        };
 
-                        (ret_type, record_creation)
+                        (ret_type, elaborated)
                     } else {
                         ctx.new_error(format!("the type '{typ}' is not a record"))
                     }
                 }
 
                 _ => {
-                    let mut has_error = false;
-                    let ctx = ctx.set_position(expr.location);
-
+                    let err_count = ctx.err_count();
                     let (expr_ty, elab_expr) = expr.infer(ctx.clone());
                     let constructor = expr_ty.get_constructor();
 
@@ -302,30 +302,22 @@ impl Infer<'_> for &Expr {
                                 elab_fields.push((Symbol(name.to_owned()), field_expr));
                             } else {
                                 ctx.error(format!("field '{name}' is duplicated"));
-                                has_error = true;
                             }
                         } else {
                             ctx.error(format!(
                                 "field '{name}' does not exist in type '{}'",
                                 constructor.clone().unwrap()
                             ));
-                            has_error = true;
                         }
                     }
 
-                    let record_update = Elaborated::RecordUpdate(
-                        Box::new(elab_expr),
-                        std::mem::take(&mut elab_fields),
-                    );
+                    let elaborated = if err_count != ctx.err_count() {
+                        Elaborated::Error
+                    } else {
+                        Elaborated::RecordUpdate(Box::new(elab_expr), elab_fields)
+                    };
 
-                    (
-                        ret_type,
-                        if has_error {
-                            Elaborated::Error
-                        } else {
-                            record_update
-                        },
-                    )
+                    (ret_type, elaborated)
                 }
             },
 
