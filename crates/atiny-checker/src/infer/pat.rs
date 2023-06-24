@@ -1,6 +1,6 @@
 use super::Infer;
 use crate::{
-    context::Ctx,
+    context::{Ctx, InferError},
     types::{MonoType, Type},
     unify::unify,
 };

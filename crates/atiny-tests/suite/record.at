@@ -1,0 +1,17 @@
+type String = | Str
+
+type User a = {
+    name: String,
+    age: a
+}
+
+fn main : Int {
+    let user = User #{
+        name = Str,
+        age = 20
+    };
+    let update = user #{
+        age = 21
+    };
+    update.age
+}

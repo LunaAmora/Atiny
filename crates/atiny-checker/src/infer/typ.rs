@@ -1,7 +1,7 @@
 //! Type inference for types on type annotations.
 
 use super::Infer;
-use crate::{context::Ctx, types::*};
+use crate::{context::*, types::*};
 
 use atiny_tree::r#abstract::{TypeKind, TypeNode};
 use std::rc::Rc;

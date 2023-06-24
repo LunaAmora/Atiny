@@ -373,6 +373,7 @@ impl Problem {
             // Opaque types will never be splitted because they are either incomplete or
             // they fall in the is_all_wildcards case
             TypeValue::Opaque => unreachable!("Opaque types are impossible here"),
+            TypeValue::Product(_) => unreachable!("Record types are impossible here"),
         }
     }
 

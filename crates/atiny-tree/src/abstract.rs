@@ -35,6 +35,19 @@ impl<T: Display> Display for AtomKind<T> {
     }
 }
 
+#[derive(Debug)]
+pub struct ExprField {
+    pub name: String,
+    pub expr: Expr,
+}
+
+impl Display for ExprField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self { name, expr: value } = self;
+        write!(f, "{name} = {value}")
+    }
+}
+
 /// Expressions are language constructions that intrinsically contains a return value. E.g
 ///
 /// ```atiny
@@ -49,6 +62,8 @@ pub enum ExprKind {
     Application(Box<Expr>, Box<Expr>),
     Let(String, Box<Expr>, Box<Expr>),
     Annotation(Box<Expr>, Box<TypeNode>),
+    RecordCreation(Box<Expr>, Vec<ExprField>),
+    Field(Box<Expr>, String),
 }
 
 impl Display for ExprKind {
@@ -60,6 +75,8 @@ impl Display for ExprKind {
             Self::Application(fu, a) => write!(f, "({fu} {a})"),
             Self::Let(n, v, next) => write!(f, "(let {n} = {v}; {next})"),
             Self::Match(e, c) => write!(f, "{e} {{{}}}", c.iter().join(", ")),
+            Self::RecordCreation(n, fields) => write!(f, "{n} {{ {} }}", fields.iter().join(", ")),
+            Self::Field(e, n) => write!(f, "{e}.{n}"),
         }
     }
 }
@@ -204,6 +221,7 @@ impl Display for TypeTupleNode {
     }
 }
 
+/// The representation of a type in the AST.
 #[derive(Debug)]
 pub enum TypeKind {
     Arrow(ArrowNode),
@@ -251,12 +269,23 @@ impl Display for Constructor {
         )
     }
 }
+#[derive(Debug)]
+pub struct Field {
+    pub name: String,
+    pub ty: TypeNode,
+}
+
+#[derive(Debug)]
+pub enum TypeDeclKind {
+    Sum(Vec<Constructor>),
+    Product(Vec<Field>),
+}
 
 #[derive(Debug)]
 pub struct TypeDecl {
     pub name: String,
     pub params: Vec<String>,
-    pub constructors: Vec<Constructor>,
+    pub constructors: TypeDeclKind,
 }
 
 impl TypeDecl {
@@ -264,10 +293,10 @@ impl TypeDecl {
         Self {
             name: "()".to_string(),
             params: Vec::new(),
-            constructors: vec![Constructor {
+            constructors: TypeDeclKind::Sum(vec![Constructor {
                 name: "()".to_string(),
                 types: Vec::new(),
-            }],
+            }]),
         }
     }
 }
@@ -275,8 +304,26 @@ impl TypeDecl {
 impl Display for TypeDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let params = self.params.iter().map(|x| format!(" {x}")).join("");
-        let constructors = self.constructors.iter().join("");
-        write!(f, "(type {}{} = {})", self.name, params, constructors)
+
+        match &self.constructors {
+            TypeDeclKind::Sum(constructors) => write!(
+                f,
+                "(type {name}{params} (sum {constructors}))",
+                name = self.name,
+                params = params,
+                constructors = constructors.iter().join(" ")
+            ),
+            TypeDeclKind::Product(fields) => write!(
+                f,
+                "(type {name}{params} (product {fields}))",
+                name = self.name,
+                params = params,
+                fields = fields
+                    .iter()
+                    .map(|x| format!("({} : {})", x.name, x.ty))
+                    .join(" ")
+            ),
+        }
     }
 }
 

@@ -1,17 +1,14 @@
 use crate::{check::Check, context::Ctx, exhaustive::Problem, infer::Infer, types::*};
 use atiny_tree::{elaborated::FnBody, r#abstract::*};
 use itertools::Itertools;
-use std::{collections::HashSet, rc::Rc};
+use std::{collections::HashSet, iter, rc::Rc};
 
 impl Ctx {
     pub fn extend_type_sigs<T: Iterator<Item = TypeDecl>>(&mut self, iter: T) {
-        let constr_list: Vec<_> = iter.map(|type_decl| type_decl.infer(self)).collect();
-
-        for (decl_name, constructors) in constr_list {
-            for constructor in constructors {
-                (decl_name.as_str(), constructor).infer(self);
-            }
-        }
+        iter.map(|type_decl| type_decl.infer(self))
+            .collect_vec()
+            .into_iter()
+            .for_each(|constr| constr.infer(self));
     }
 
     pub fn extend_fun_sigs<T: Iterator<Item = FnDecl>>(&mut self, iter: T) -> Vec<FnBody<Type>> {
@@ -38,18 +35,67 @@ impl<'a> Infer<'a> for Vec<TopLevel> {
 
 impl<'a> Infer<'a> for TypeDecl {
     type Context = &'a mut Ctx;
-    type Return = (String, Vec<Constructor>);
+    type Return = (String, TypeDeclKind);
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
+        let value = match self.constructors {
+            TypeDeclKind::Sum(_) => TypeValue::Sum(Vec::new()),
+            TypeDeclKind::Product(_) => TypeValue::Product(Vec::new()),
+        };
+
         let type_sig = TypeSignature {
             name: self.name.clone(),
             params: self.params.clone(),
-            value: TypeValue::Sum(Vec::new()),
+            value,
         };
 
         ctx.signatures.types.insert(self.name.clone(), type_sig);
 
         (self.name, self.constructors)
+    }
+}
+
+impl<'a> Infer<'a> for (String, TypeDeclKind) {
+    type Context = &'a mut Ctx;
+    type Return = ();
+
+    fn infer(self, ctx: Self::Context) -> Self::Return {
+        let (decl_name, kind) = self;
+        let name = iter::repeat(decl_name.as_str());
+
+        match kind {
+            TypeDeclKind::Sum(constrs) => name.zip(constrs).for_each(|constr| constr.infer(ctx)),
+            TypeDeclKind::Product(fields) => name.zip(fields).for_each(|field| field.infer(ctx)),
+        }
+    }
+}
+
+impl<'a> Infer<'a> for (&str, Field) {
+    type Context = &'a mut Ctx;
+    type Return = ();
+
+    fn infer(self, ctx: Self::Context) -> Self::Return {
+        let (decl_name, field) = self;
+
+        let Some(TypeSignature { params, .. }) = &ctx.signatures.types.get(decl_name) else {
+            panic!("The String should be a valid type signature name on the Ctx");
+        };
+
+        let new_ctx = ctx.extend_types(params);
+
+        let mono = field.ty.infer(new_ctx);
+
+        let sig_value = &mut ctx.signatures.types.get_mut(decl_name).unwrap().value;
+
+        if let TypeValue::Product(ref mut rec) = sig_value {
+            rec.push((field.name.clone(), mono));
+        }
+
+        ctx.signatures
+            .fields
+            .entry(field.name)
+            .or_default()
+            .insert(decl_name.to_string());
     }
 }
 

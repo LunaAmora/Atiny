@@ -19,10 +19,7 @@ Sep<U, T>: Vec<T> = {
     }
 };
 
-
-
 // For expressions
-
 
 ExprAtomItem: AtomKind<Expr> = {
     "_"                => AtomKind::Wildcard,
@@ -48,15 +45,22 @@ CallItem: ExprKind = {
 
 Call: Expr = Loc<CallItem>;
 
+ExprField: ExprField = {
+    <name: Id> "=" <e:Expr> => ExprField { name, expr: e }
+}
+
 ExprItem: ExprKind = {
-    "|" <t: Id> "|" <s:Expr>                     => ExprKind::Abstraction(t, Box::new(s)),
-    "let" <t: Id> "=" <e:Expr> ";" <next:Expr>   => ExprKind::Let(t, Box::new(e), Box::new(next)),
-    "match" <pat:Expr> "{" <c:Clauses> "}"       => ExprKind::Match(Box::new(pat), c),
+    "|" <t: Id> "|" <s:Expr>                      => ExprKind::Abstraction(t, Box::new(s)),
+    "let" <t: Id> "=" <e:Expr> ";" <next:Expr>    => ExprKind::Let(t, Box::new(e), Box::new(next)),
+    "match" <pat:Expr> "{" <c:Clauses> "}"        => ExprKind::Match(Box::new(pat), c),
     "if" "let" <pat:Pattern> "=" <m:Expr>
-        "{" <t:Expr> "}" "else"
-        "{" <f:Expr> "}"                         => ExprKind::if_let(pat, m, t, f),
-    <f:Call> <t: TypeAnotation>                  => ExprKind::Annotation(Box::new(f), Box::new(t)),
-    <f:Call>                                     => f.data,
+        "{" <t:Expr> "}" "else" 
+        "{" <f:Expr> "}"                          => ExprKind::if_let(pat, m, t, f),
+    <f:Call> <t: TypeAnotation>                   => ExprKind::Annotation(Box::new(f), Box::new(t)),
+
+    <t:Call> "#{" <fields: Sep<",", ExprField>> "}" => ExprKind::RecordCreation(Box::new(t), fields),
+    <f:Call>                                        => f.data,
+    <f:AtomExpr> "." <name: Id>                     => ExprKind::Field(Box::new(f), name),
 };
 
 Block : Expr = {
@@ -143,8 +147,17 @@ Constructor : Constructor = {
     "|" <name: Id> <types: TypeAtom*> => Constructor { name, types } 
 }
 
+Field: Field = {
+    <name: Id> ":" <ty: TypeNode> => Field { name, ty }
+}
+
+TypeDeclKind : TypeDeclKind = {
+    <constructors: Constructor+> => TypeDeclKind::Sum(constructors),
+    "{" <fields: Sep<",", Field>> "}" => TypeDeclKind::Product(fields)
+}
+
 TypeDecl : TypeDecl = {
-    "type" <name: Id> <params: Id*> "=" <constructors: Constructor*> => TypeDecl {
+    "type" <name: Id> <params: Id*> "=" <constructors: TypeDeclKind> => TypeDecl {
         name,
         params,
         constructors

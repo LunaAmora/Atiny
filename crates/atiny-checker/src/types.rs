@@ -186,6 +186,13 @@ pub enum MonoType {
 }
 
 impl MonoType {
+    pub fn get_constructor(self: &Type) -> Option<String> {
+        match &**self {
+            Self::Application(s, _) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
     pub fn iter(self: Type) -> TypeIter {
         TypeIter { typ: self }
     }
@@ -225,7 +232,7 @@ impl Display for MonoType {
             },
             Self::Application(name, args) if args.is_empty() => write!(f, "{}", name),
             Self::Application(name, args) => write!(f, "({} {})", name, args.iter().join(" ")),
-            Self::Error => write!(f, "ERROR"),
+            Self::Error => write!(f, "_"),
         }
     }
 }
@@ -410,6 +417,7 @@ impl Display for DeclSignature {
 #[derive(Clone, Debug)]
 pub enum TypeValue {
     Sum(Vec<Rc<ConstructorSignature>>),
+    Product(Vec<(String, Rc<MonoType>)>),
     Opaque,
 }
 
@@ -427,6 +435,13 @@ pub struct TypeSignature {
 }
 
 impl TypeSignature {
+    pub fn application(&self) -> Type {
+        Rc::new(MonoType::Application(
+            self.name.to_string(),
+            self.params.iter().cloned().map(MonoType::var).collect(),
+        ))
+    }
+
     pub fn new_opaque(name: String) -> Self {
         Self {
             name,
@@ -444,6 +459,7 @@ impl TypeSignature {
                     .collect::<HashSet<_>>(),
             ),
             TypeValue::Opaque => None,
+            TypeValue::Product(_) => todo!(),
         }
     }
 }
@@ -454,6 +470,13 @@ impl Display for TypeValue {
             Self::Sum(constructors) => {
                 let constructors = constructors.iter().join("\n        ");
                 write!(f, "{}", constructors)
+            }
+            Self::Product(fields) => {
+                let fields = fields
+                    .iter()
+                    .map(|(name, typ)| format!("{} : {}", name, typ))
+                    .join("\n        ");
+                write!(f, "{{ {} }}", fields)
             }
             Self::Opaque => write!(f, "opaque"),
         }

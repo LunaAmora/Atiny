@@ -14,6 +14,7 @@ use super::types::*;
 pub struct Signatures {
     pub types: im_rc::OrdMap<String, TypeSignature>,
     pub values: im_rc::OrdMap<String, DeclSignature>,
+    pub fields: im_rc::OrdMap<String, im_rc::OrdSet<String>>,
 }
 
 impl Display for Signatures {
@@ -148,7 +149,7 @@ impl Ctx {
             .push(Error::new(msg, self.location));
     }
 
-    pub fn sugestion(&self, msg: String) {
+    pub fn suggestion(&self, msg: String) {
         self.errors
             .borrow_mut()
             .push(Error::new_sugestion(msg, self.location));
@@ -178,8 +179,14 @@ impl Ctx {
     pub fn new_hole(&self) -> Rc<MonoType> {
         MonoType::new_hole(self.new_name(), self.level)
     }
+}
 
-    pub fn new_error(&self, msg: String) -> Rc<MonoType> {
+pub trait InferError<T> {
+    fn new_error(&self, msg: String) -> T;
+}
+
+impl InferError<Rc<MonoType>> for Ctx {
+    fn new_error(&self, msg: String) -> Rc<MonoType> {
         self.error(msg);
         Rc::new(MonoType::Error)
     }
