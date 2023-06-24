@@ -102,15 +102,15 @@ impl Infer<'_> for &Expr {
 
                 let new_ctx = ctx.extend(x.to_owned(), t_generalized);
 
-                let (infered, el1) = e1.infer(new_ctx);
+                let (inferred, el1) = e1.infer(new_ctx);
                 let expr = Elaborated::Let(Symbol(x.to_owned()), Box::new(el0), Box::new(el1));
-                (infered, expr)
+                (inferred, expr)
             }
 
             Match(e, clauses) => {
                 let err_count = ctx.err_count();
 
-                let (pat_ty, scrutineer) = e.infer(ctx.clone());
+                let (pat_ty, scrutinee) = e.infer(ctx.clone());
                 let ret_ty = ctx.new_hole();
 
                 let mut places = Vec::new();
@@ -134,12 +134,12 @@ impl Infer<'_> for &Expr {
                 // pattern match and with linear variables.
                 let elaborated = if err_count == ctx.err_count() {
                     let columns = if !clauses.is_empty() {
-                        let mut collumns = vec![clauses[0].pat.clone()];
+                        let mut columns = vec![clauses[0].pat.clone()];
 
                         for c in &clauses[1..] {
                             let column_pat = c.pat.clone();
                             let column = vec![column_pat.clone()];
-                            let problem = Problem::new(pat_ty.clone(), column, collumns.clone());
+                            let problem = Problem::new(pat_ty.clone(), column, columns.clone());
 
                             ctx.location = column_pat.location;
                             let witness = problem.exhaustiveness(&ctx);
@@ -148,10 +148,10 @@ impl Infer<'_> for &Expr {
                                 ctx.error(format!("the clause is useless: {}", column_pat));
                             }
 
-                            collumns.push(column_pat.clone());
+                            columns.push(column_pat.clone());
                         }
 
-                        collumns
+                        columns
                     } else {
                         Vec::new()
                     };
@@ -169,9 +169,7 @@ impl Infer<'_> for &Expr {
                             ctx.suggestion(format!("{} => _,", err));
                             Elaborated::Error
                         },
-                        |tree| {
-                            Elaborated::CaseTree(Box::new(scrutineer), CaseTree { tree, places })
-                        },
+                        |tree| Elaborated::CaseTree(Box::new(scrutinee), CaseTree { tree, places }),
                     )
                 } else {
                     Elaborated::Error
@@ -253,6 +251,8 @@ impl Infer<'_> for &Expr {
                 }
 
                 _ => {
+                    let ctx = ctx.set_position(expr.location);
+
                     let (expr_ty, elab_expr) = expr.infer(ctx.clone());
                     let constructor = expr_ty.get_constructor();
 
@@ -319,6 +319,8 @@ impl Infer<'_> for &Expr {
             },
 
             Field(expr, field) => {
+                let ctx = ctx.set_position(expr.location);
+
                 let (expr_ty, elab_expr) = expr.infer(ctx.clone());
                 let constructor = expr_ty.get_constructor();
 
