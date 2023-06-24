@@ -232,7 +232,7 @@ impl Display for MonoType {
             },
             Self::Application(name, args) if args.is_empty() => write!(f, "{}", name),
             Self::Application(name, args) => write!(f, "({} {})", name, args.iter().join(" ")),
-            Self::Error => write!(f, "ERROR"),
+            Self::Error => write!(f, "_"),
         }
     }
 }

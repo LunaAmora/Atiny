@@ -223,10 +223,10 @@ impl Infer<'_> for &Expr {
 
                                     elab_fields.push((Symbol(name.to_owned()), field_expr));
                                 } else {
-                                    return ctx.new_error(format!("field '{name}' is duplicated"));
+                                    ctx.error(format!("field '{name}' is duplicated"));
                                 }
                             } else {
-                                return ctx.new_error(format!(
+                                ctx.error(format!(
                                     "field '{name}' does not exist in type '{name}'"
                                 ));
                             }
@@ -251,6 +251,7 @@ impl Infer<'_> for &Expr {
                 }
 
                 _ => {
+                    let mut has_error = false;
                     let ctx = ctx.set_position(expr.location);
 
                     let (expr_ty, elab_expr) = expr.infer(ctx.clone());
@@ -262,7 +263,8 @@ impl Infer<'_> for &Expr {
                             ..
                         },
                     ) = constructor.as_ref().and_then(|name| ctx.lookup_type(name)) else {
-                        return ctx.new_error(format!("the type '{expr_ty}' is not a record"));
+                        ctx.error(format!("the type '{expr_ty}' is not a record"));
+                        return (expr_ty, Elaborated::Error)
                     };
 
                     let mut elab_fields = vec![];
@@ -299,13 +301,15 @@ impl Infer<'_> for &Expr {
 
                                 elab_fields.push((Symbol(name.to_owned()), field_expr));
                             } else {
-                                return ctx.new_error(format!("field '{name}' is duplicated"));
+                                ctx.error(format!("field '{name}' is duplicated"));
+                                has_error = true;
                             }
                         } else {
-                            return ctx.new_error(format!(
+                            ctx.error(format!(
                                 "field '{name}' does not exist in type '{}'",
-                                constructor.unwrap()
+                                constructor.clone().unwrap()
                             ));
+                            has_error = true;
                         }
                     }
 
@@ -314,7 +318,14 @@ impl Infer<'_> for &Expr {
                         std::mem::take(&mut elab_fields),
                     );
 
-                    (ret_type, record_update)
+                    (
+                        ret_type,
+                        if has_error {
+                            Elaborated::Error
+                        } else {
+                            record_update
+                        },
+                    )
                 }
             },
 
