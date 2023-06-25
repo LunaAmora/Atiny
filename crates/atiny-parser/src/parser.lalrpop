@@ -20,6 +20,8 @@ Sep<U, T>: (Vec<T>, bool) = {
     }
 };
 
+BlockList<U, T>: Vec<T> = "{" <Sep<U, T>> "}"  => <>.0;
+
 // O: From<AtomKind<O>>
 AtomItem<I, O> : O = {
     "_" => AtomKind::Wildcard.into(),
@@ -48,25 +50,30 @@ Call: Expr = {
 };
 
 ExprItem: ExprKind = {
-    "|" <t:LowerId> "|" <s:Expr>                   => ExprKind::Abstraction(t, Box::new(s)),
-    "let" <t:LowerId> "=" <e:Expr> ";" <next:Expr> => ExprKind::Let(t, Box::new(e), Box::new(next)),
-    "match" <pat:Expr> "{" <c:Clauses> "}"         => ExprKind::Match(Box::new(pat), c),
-    "if" "let" <Pattern> "=" <Expr>
-        "{" <Expr> "}" "else" 
-        "{" <Expr> "}"                             => ExprKind::if_let(<>),
-    <f:Call> <t:TypeAnotation>                     => ExprKind::Annotation(Box::new(f), Box::new(t)),
-    <t:Call> "#{" <fields:Fields> "}"              => ExprKind::RecordCreation(Box::new(t), fields),
-    <f:AtomExpr> "." <name:LowerId>                => ExprKind::Field(Box::new(f), name),
+    "|" <t:LowerId> "|" <s:Expr>                  => ExprKind::Abstraction(t, Box::new(s)),
+    "match" <pat:Expr> <c:BlockList<",", Clause>> => ExprKind::Match(Box::new(pat), c),
+    <f:Call> <t:TypeAnotation>                    => ExprKind::Annotation(Box::new(f), Box::new(t)),
+    <t:Call> "#" <f:BlockList<",", ExprField>>    => ExprKind::RecordCreation(Box::new(t), f),
+    <f:AtomExpr> "." <name:LowerId>               => ExprKind::Field(Box::new(f), name),
+    
+    "if" "let" <Pattern> "=" <Expr> <BlockExpr> "else" <BlockExpr> => ExprKind::if_let(<>),
 };
 
-Block: Expr = {
-    "{" <Expr> "}",
-    Loc<r"[{][\s]*[}]"> => <>.map(|_| ExprKind::Atom(AtomKind::unit()))
+Statement: Statement = {
+    "let" <LowerId> "=" <Expr> => Statement::Let(<>),
+    Expr => Statement::Expr(<>)
+}
+
+Block: Vec<Statement> = {
+    Loc<r"[{][\s]*[}]"> => vec![Statement::Expr(<>.map(|_| ExprKind::Atom(AtomKind::unit())))],
+    BlockList<";", Statement>
 };
+
+BlockExpr: Expr = Loc<Block> => <>.map(|block|  ExprKind::Block(block));
 
 pub Expr: Expr = {
     Loc<ExprItem>,
-    Block,
+    BlockExpr,
     Call
 };
 
@@ -81,11 +88,7 @@ Pattern: Pattern = {
 
 Clause: Clause = <Pattern> "=>" <Expr> => Clause::new(<>);
 
-Clauses: Vec<Clause> = Sep<",", Clause> => <>.0;
-
 ExprField: ExprField = <name: LowerId> "=" <expr: Expr> => ExprField {<>};
-
-Fields: Vec<ExprField> = Sep<",", ExprField> => <>.0;
 
 // For Types
 
@@ -138,8 +141,8 @@ Constructor: Constructor = "|" <name: UpperId> <types: TypeAtom*> => Constructor
 Field: Field = <name: LowerId> ":" <ty: TypeNode> => Field {<>};
 
 TypeDeclKind: TypeDeclKind = {
-    Constructor+              => TypeDeclKind::Sum(<>),
-    "{" <Sep<",", Field>> "}" => TypeDeclKind::Product(<>.0)
+    Constructor+          => TypeDeclKind::Sum(<>),
+    BlockList<",", Field> => TypeDeclKind::Product(<>)
 }
 
 TypeDecl: TypeDecl = {
@@ -150,7 +153,7 @@ TypeAnotation: TypeNode = ":" <TypeNode>;
 
 Param: (Pattern, TypeNode) = "(" <Pattern> <TypeAnotation> ")" => (<>);
 
-FnDecl: FnDecl = "fn" <Loc<LowerId>> <Param*> <TypeAnotation?> <Block> => FnDecl::new(<>);
+FnDecl: FnDecl = "fn" <Loc<LowerId>> <Param*> <TypeAnotation?> <BlockExpr> => FnDecl::new(<>);
 
 TopLevelKind: TopLevelKind = {
     FnDecl   => TopLevelKind::FnDecl(<>), 

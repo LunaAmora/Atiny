@@ -1,2 +1,2 @@
 (type Result t u (sum | Ok (t) | Err (u)))
-fn ata (a : T) (b : T) : T {(|x| (let a = 2; a))}
+fn ata (a : T) (b : T) : T {(|x| {let a = 2; a})}
