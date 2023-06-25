@@ -166,6 +166,15 @@ pub struct ArrowNode {
     pub right: Box<TypeNode>,
 }
 
+impl ArrowNode {
+    pub fn new(left: TypeNode, right: TypeNode) -> Self {
+        Self {
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+}
+
 impl Display for ArrowNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({} -> {})", self.left, self.right)

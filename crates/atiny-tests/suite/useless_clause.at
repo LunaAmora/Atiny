@@ -1,9 +1,9 @@
-type Bool = | true | false
+type Bool = | True | False
 
 fn ata (x: (Int, Bool)): Int {
     match x {
         (1, _) => 1,
-        (1, true)  => 2,
-        (_, true)  => 3,
+        (1, True)  => 2,
+        (_, True)  => 3,
     }
 }
