@@ -49,8 +49,6 @@ impl Infer<'_> for &Expr {
 
                     None => ctx.new_error(format!("unbound variable '{}'", x)),
                 },
-
-                Group(expr) => expr.infer(ctx),
             },
 
             Application(fun, arg) => {

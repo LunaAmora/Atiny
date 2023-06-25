@@ -14,7 +14,6 @@ pub enum AtomKind<T> {
     Number(u64),
     Tuple(Vec<T>),
     Identifier(String),
-    Group(Box<T>),
 }
 
 impl<T> AtomKind<T> {
@@ -30,8 +29,19 @@ impl<T: Display> Display for AtomKind<T> {
             Self::Number(n) => write!(f, "{n}"),
             Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Identifier(id) => write!(f, "{id}"),
-            Self::Group(id) => write!(f, "({id})"),
         }
+    }
+}
+
+impl From<AtomKind<Expr>> for ExprKind {
+    fn from(value: AtomKind<Expr>) -> Self {
+        Self::Atom(value)
+    }
+}
+
+impl From<AtomKind<Pattern>> for PatternKind {
+    fn from(value: AtomKind<Pattern>) -> Self {
+        Self::Atom(value)
     }
 }
 

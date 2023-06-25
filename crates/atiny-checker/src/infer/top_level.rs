@@ -248,10 +248,6 @@ impl Ctx {
 
     fn insert_pattern_bind(&mut self, pattern: &Pattern, pattern_type: Rc<MonoType>) {
         match (&pattern.data, &*pattern_type) {
-            (PatternKind::Atom(AtomKind::Group(pat)), _) => {
-                self.insert_pattern_bind(pat, pattern_type);
-            }
-
             (PatternKind::Atom(atom), _) => {
                 self.map.insert(atom.to_string(), pattern_type.to_poly());
             }

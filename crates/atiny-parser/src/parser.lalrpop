@@ -9,32 +9,36 @@ Loc<T>: Located<T> = {
     <s: @L> <data: T> <e: @R> => Located { data, location: ByteRange(Byte(s), Byte(e)) }
 }
 
-Sep<U, T>: Vec<T> = {
+//         (Vec,Trailing)
+Sep<U, T>: (Vec<T>, bool) = {
     <mut v:(<T> U)*> <e:T?> => match e {
         Some(e) => {
             v.push(e);
-            v
+            (v, false)
         }
-        None => v
+        None => (v, true)
     }
 };
 
-// For expressions
+// O: From<AtomKind<O>>
+AtomItem<I, O> : O = {
+    "_" => AtomKind::Wildcard.into(),
+    Num => AtomKind::Number(<>).into(),
+    Id  => AtomKind::Identifier(<>).into(),
+    "(" <mut sep:Sep<",", I>> ")" => {
+        let (mut vec, trailing) = sep;
 
-ExprAtomItem: AtomKind<Expr> = {
-    "_" => AtomKind::Wildcard,
-    Num => AtomKind::Number(<>),
-    Id  => AtomKind::Identifier(<>),
-    "(" <mut vec:Sep<",", Expr>> ")" => {
         match vec.len() {
-            0 => AtomKind::unit(),
-            1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
-            _ => AtomKind::Tuple(vec),
+            0 => AtomKind::unit().into(),
+            1 if !trailing => vec.pop().unwrap().data,
+            _ => AtomKind::Tuple(vec).into(),
         }
     },
 }
 
-AtomExpr: Expr = Loc<ExprAtomItem> => <>.map(|a| ExprKind::Atom(a));
+// For expressions
+
+AtomExpr: Expr = Loc<AtomItem<Expr, ExprItem>>;
 
 CallItem: ExprKind = <t:Call> <a:AtomExpr> => ExprKind::Application(Box::new(t), Box::new(a));
 
@@ -51,7 +55,7 @@ ExprItem: ExprKind = {
         "{" <Expr> "}" "else" 
         "{" <Expr> "}"                             => ExprKind::if_let(<>),
     <f:Call> <t:TypeAnotation>                     => ExprKind::Annotation(Box::new(f), Box::new(t)),
-    <t:Call> "#{" <fields:Sep<",", ExprField>> "}" => ExprKind::RecordCreation(Box::new(t), fields),
+    <t:Call> "#{" <fields:Fields> "}"              => ExprKind::RecordCreation(Box::new(t), fields),
     <f:AtomExpr> "." <name:LowerId>                => ExprKind::Field(Box::new(f), name),
 };
 
@@ -66,42 +70,33 @@ pub Expr: Expr = {
     Call
 };
 
-PatAtomItem: AtomKind<Pattern> = {
-    "_" => AtomKind::Wildcard,
-    Num => AtomKind::Number(<>),
-    Id  => AtomKind::Identifier(<>),
-    "(" <mut vec:Sep<",", Pattern>> ")" => {
-        match vec.len() {
-            0 => AtomKind::unit(),
-            1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
-            _ => AtomKind::Tuple(vec),
-        }
-    },
-}
+AtomPattern: Pattern = Loc<AtomItem<Pattern, PatternItem>>;
 
-AtomPat: Pattern = Loc<PatAtomItem> => <>.map(|p| PatternKind::Atom(p));
-
-PatternItem: PatternKind = UpperId AtomPat+ => PatternKind::Constructor(<>);
+PatternItem: PatternKind = UpperId AtomPattern+ => PatternKind::Constructor(<>);
 
 Pattern: Pattern = {
     Loc<PatternItem>,
-    AtomPat
+    AtomPattern
 };
 
 Clause: Clause = <Pattern> "=>" <Expr> => Clause::new(<>);
 
-Clauses = Sep<",", Clause>;
+Clauses: Vec<Clause> = Sep<",", Clause> => <>.0;
 
 ExprField: ExprField = <name: LowerId> "=" <expr: Expr> => ExprField {<>};
+
+Fields: Vec<ExprField> = Sep<",", ExprField> => <>.0;
 
 // For Types
 
 TypeAtomItem: TypeKind = {
     <name: Id> => TypeKind::Variable(VariableNode {<>}),
-    "(" <mut types:Sep<",", TypeNode>> ")" => {
+    "(" <mut sep:Sep<",", TypeNode>> ")" => {
+        let (mut types, trailing) = sep;
+
         match types.len() {
             0 => TypeKind::unit(),
-            1 => types.pop().unwrap().data,
+            1 if !trailing => types.pop().unwrap().data,
             _ => TypeKind::Tuple(TypeTupleNode { types }),
         }
     }
@@ -143,8 +138,8 @@ Constructor: Constructor = "|" <name: UpperId> <types: TypeAtom*> => Constructor
 Field: Field = <name: LowerId> ":" <ty: TypeNode> => Field {<>};
 
 TypeDeclKind: TypeDeclKind = {
-    Constructor+                      => TypeDeclKind::Sum(<>),
-    "{" <fields: Sep<",", Field>> "}" => TypeDeclKind::Product(<>)
+    Constructor+              => TypeDeclKind::Sum(<>),
+    "{" <Sep<",", Field>> "}" => TypeDeclKind::Product(<>.0)
 }
 
 TypeDecl: TypeDecl = {
