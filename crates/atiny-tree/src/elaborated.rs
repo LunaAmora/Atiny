@@ -13,6 +13,12 @@ pub struct VariableNode<T> {
 }
 
 #[derive(Debug)]
+pub enum Stmt<T> {
+    Let(Symbol, Expr<T>),
+    Expr(Expr<T>),
+}
+
+#[derive(Debug)]
 pub enum Expr<T> {
     Number(u64),
     Tuple(Vec<Expr<T>>),
@@ -23,11 +29,12 @@ pub enum Expr<T> {
     Abstraction(Vec<Symbol>, Box<Expr<T>>),
     Application(Box<Expr<T>>, Vec<Expr<T>>, T),
 
-    Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
-
     RecordCreation(Symbol, Vec<(Symbol, Expr<T>)>),
     RecordUpdate(Box<Expr<T>>, Vec<(Symbol, Expr<T>)>),
     RecordField(Symbol, Box<Expr<T>>, Symbol),
+
+    Block(Vec<Stmt<T>>),
+
     Error,
 }
 

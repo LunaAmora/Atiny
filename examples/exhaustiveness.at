@@ -1,9 +1,9 @@
 type List t = | Cons t (List t) | Nil
-type Bool = | true | false
+type Bool = | True | False
 
 fn ata (x: List Bool) : Int {
     match x {
-        Cons true (Cons _ _) => 2,
+        Cons True (Cons _ _) => 2,
         Nil                  => 4,
     }
 }

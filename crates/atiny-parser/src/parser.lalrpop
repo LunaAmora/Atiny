@@ -9,191 +9,171 @@ Loc<T>: Located<T> = {
     <s: @L> <data: T> <e: @R> => Located { data, location: ByteRange(Byte(s), Byte(e)) }
 }
 
-Sep<U, T>: Vec<T> = {
+//         (Vec,Trailing)
+Sep<U, T>: (Vec<T>, bool) = {
     <mut v:(<T> U)*> <e:T?> => match e {
         Some(e) => {
             v.push(e);
-            v
+            (v, false)
         }
-        None => v
+        None => (v, true)
     }
 };
+
+BlockList<U, T>: Vec<T> = "{" <Sep<U, T>> "}"  => <>.0;
+
+// O: From<AtomKind<O>>
+AtomItem<I, O> : O = {
+    "_" => AtomKind::Wildcard.into(),
+    Num => AtomKind::Number(<>).into(),
+    Id  => AtomKind::Identifier(<>).into(),
+    "(" <mut sep:Sep<",", I>> ")" => {
+        let (mut vec, trailing) = sep;
+
+        match vec.len() {
+            0 => AtomKind::unit().into(),
+            1 if !trailing => vec.pop().unwrap().data,
+            _ => AtomKind::Tuple(vec).into(),
+        }
+    },
+}
 
 // For expressions
 
-ExprAtomItem: AtomKind<Expr> = {
-    "_"                => AtomKind::Wildcard,
-    <n:Num>            => AtomKind::Number(n),
-    <id: Id>           => AtomKind::Identifier(id),
-    "(" <mut vec:Sep<",", Expr>> ")" => {
-        match vec.len() {
-            0 => AtomKind::unit(),
-            1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
-            _ => AtomKind::Tuple(vec),
-        }
-    },
-}
+AtomExpr: Expr = Loc<AtomItem<Expr, ExprItem>>;
 
-AtomExpr: Expr = {
-    <a: Loc<ExprAtomItem>> => a.map(|a| ExprKind::Atom(a))
+CallItem: ExprKind = <t:Call> <a:AtomExpr> => ExprKind::Application(Box::new(t), Box::new(a));
+
+Call: Expr = {
+    Loc<CallItem>,
+    AtomExpr
 };
-
-CallItem: ExprKind = {
-    <t:Call> <a:AtomExpr> => ExprKind::Application(Box::new(t), Box::new(a)),
-    <t:AtomExpr>          => t.data,
-}
-
-Call: Expr = Loc<CallItem>;
-
-ExprField: ExprField = {
-    <name: Id> "=" <e:Expr> => ExprField { name, expr: e }
-}
 
 ExprItem: ExprKind = {
-    "|" <t: Id> "|" <s:Expr>                      => ExprKind::Abstraction(t, Box::new(s)),
-    "let" <t: Id> "=" <e:Expr> ";" <next:Expr>    => ExprKind::Let(t, Box::new(e), Box::new(next)),
-    "match" <pat:Expr> "{" <c:Clauses> "}"        => ExprKind::Match(Box::new(pat), c),
-    "if" "let" <pat:Pattern> "=" <m:Expr>
-        "{" <t:Expr> "}" "else" 
-        "{" <f:Expr> "}"                          => ExprKind::if_let(pat, m, t, f),
-    <f:Call> <t: TypeAnotation>                   => ExprKind::Annotation(Box::new(f), Box::new(t)),
-
-    <t:Call> "#{" <fields: Sep<",", ExprField>> "}" => ExprKind::RecordCreation(Box::new(t), fields),
-    <f:Call>                                        => f.data,
-    <f:AtomExpr> "." <name: Id>                     => ExprKind::Field(Box::new(f), name),
+    "|" <t:LowerId> "|" <s:Expr>                  => ExprKind::Abstraction(t, Box::new(s)),
+    "match" <pat:Expr> <c:BlockList<",", Clause>> => ExprKind::Match(Box::new(pat), c),
+    <f:Call> <t:TypeAnotation>                    => ExprKind::Annotation(Box::new(f), Box::new(t)),
+    <t:Call> "#" <f:BlockList<",", ExprField>>    => ExprKind::RecordCreation(Box::new(t), f),
+    <f:AtomExpr> "." <name:LowerId>               => ExprKind::Field(Box::new(f), name),
+    
+    "if" "let" <Pattern> "=" <Expr> <BlockExpr> "else" <BlockExpr> => ExprKind::if_let(<>),
 };
 
-Block : Expr = {
-    "{" <body: Expr> "}"    => body,
-    <b: Loc<r"[{][\s]*[}]">> => {
-        Located::new(b.location, ExprKind::Atom(AtomKind::unit()))
-    }
-};
-
-pub Expr : Expr = {
-    <Loc<ExprItem>> => <>,
-    <Block>         => <>
-};
-
-PatAtomItem: AtomKind<Pattern> = {
-    "_"                => AtomKind::Wildcard,
-    <n:Num>            => AtomKind::Number(n),
-    <id: Id>           => AtomKind::Identifier(id),
-    "(" <mut vec:Sep<",", Pattern>> ")" => {
-        match vec.len() {
-            0 => AtomKind::unit(),
-            1 => AtomKind::Group(Box::new(vec.pop().unwrap())),
-            _ => AtomKind::Tuple(vec),
-        }
-    },
+Statement: Statement = {
+    "let" <LowerId> "=" <Expr> => Statement::Let(<>),
+    Expr => Statement::Expr(<>)
 }
 
-AtomPat: Pattern = {
-    <a: Loc<PatAtomItem>> => a.map(|a| PatternKind::Atom(a))
+Block: Vec<Statement> = {
+    Loc<r"[{][\s]*[}]"> => vec![Statement::Expr(<>.map(|_| ExprKind::Atom(AtomKind::unit())))],
+    BlockList<";", Statement>
 };
 
-Clause: Clause = {
-    <pat:Pattern> "=>" <e:Expr> => Clause::new(pat, e)
-}
+BlockExpr: Expr = Loc<Block> => <>.map(|block|  ExprKind::Block(block));
 
-Clauses = Sep<",", Clause>;
+pub Expr: Expr = {
+    Loc<ExprItem>,
+    BlockExpr,
+    Call
+};
 
-PatternItem : PatternKind = {
-    <pat:AtomPat>               => pat.data,
-    <name: Id> <pats: AtomPat+> => PatternKind::Constructor(name, pats)
-}
+AtomPattern: Pattern = Loc<AtomItem<Pattern, PatternItem>>;
 
-Pattern : Pattern = Loc<PatternItem>;
+PatternItem: PatternKind = UpperId AtomPattern+ => PatternKind::Constructor(<>);
+
+Pattern: Pattern = {
+    Loc<PatternItem>,
+    AtomPattern
+};
+
+Clause: Clause = <Pattern> "=>" <Expr> => Clause::new(<>);
+
+ExprField: ExprField = <name: LowerId> "=" <expr: Expr> => ExprField {<>};
 
 // For Types
 
-TypeAtomItem : TypeKind = {
-    <id: Id>                    => TypeKind::Variable(VariableNode { name: id }),
-    "(" <mut types:Sep<",", TypeNode>> ")" => {
+TypeAtomItem: TypeKind = {
+    <name: Id> => TypeKind::Variable(VariableNode {<>}),
+    "(" <mut sep:Sep<",", TypeNode>> ")" => {
+        let (mut types, trailing) = sep;
+
         match types.len() {
             0 => TypeKind::unit(),
-            1 => types.pop().unwrap().data,
+            1 if !trailing => types.pop().unwrap().data,
             _ => TypeKind::Tuple(TypeTupleNode { types }),
         }
     }
 }
 
-TypeAtom : TypeNode = Loc<TypeAtomItem>;
+TypeAtom: TypeNode = Loc<TypeAtomItem>;
 
-TypeCallItem : TypeKind = {
-    <fun: Id> <args: TypeAtom+> => TypeKind::Application(TypeApplicationNode { fun, args }),
-    <t:TypeAtom>         => t.data,
+TypeCallItem: TypeKind = {
+    <fun:UpperId> <args:TypeAtom+> => TypeKind::Application(TypeApplicationNode {<>}),
 }
 
-TypeCall : TypeNode = Loc<TypeCallItem>;
+TypeCall: TypeNode = {
+    Loc<TypeCallItem>,
+    TypeAtom
+};
 
-TypeArrowItem : TypeKind = {
-    <t:TypeCall> "->" <a:TypeNode> => TypeKind::Arrow(ArrowNode { left: Box::new(t), right: Box::new(a) }),
-    <t:TypeCall>               => t.data,
-}
+TypeArrowItem: TypeKind = <TypeCall> "->" <TypeNode> => TypeKind::Arrow(ArrowNode::new(<>));
 
-TypeArrow : TypeNode = Loc<TypeArrowItem>;
+TypeArrow: TypeNode = {
+    Loc<TypeArrowItem>,
+    TypeCall
+};
 
-TypeKind : TypeKind = {
-    <t: TypeArrow> => t.data,
-    "forall" <args: Id*> "." <body: TypeNode> => TypeKind::Forall(ForallNode { args, body: Box::new(body) }),
-}
-
-TypeNode : TypeNode = Loc<TypeKind>;
-
-// Top level
-
-Constructor : Constructor = {
-    "|" <name: Id> <types: TypeAtom*> => Constructor { name, types } 
-}
-
-Field: Field = {
-    <name: Id> ":" <ty: TypeNode> => Field { name, ty }
-}
-
-TypeDeclKind : TypeDeclKind = {
-    <constructors: Constructor+> => TypeDeclKind::Sum(constructors),
-    "{" <fields: Sep<",", Field>> "}" => TypeDeclKind::Product(fields)
-}
-
-TypeDecl : TypeDecl = {
-    "type" <name: Id> <params: Id*> "=" <constructors: TypeDeclKind> => TypeDecl {
-        name,
-        params,
-        constructors
+TypeKind: TypeKind = {
+    "forall" <args: LowerId*> "." <body: TypeNode> => {
+        TypeKind::Forall(ForallNode { args, body: Box::new(body) })
     }
 }
 
-TypeAnotation : TypeNode = {
-    ":" <typ: TypeNode> => typ
+TypeNode: TypeNode = {
+    Loc<TypeKind>,
+    TypeArrow
+};
+
+// Top level
+
+Constructor: Constructor = "|" <name: UpperId> <types: TypeAtom*> => Constructor {<>};
+
+Field: Field = <name: LowerId> ":" <ty: TypeNode> => Field {<>};
+
+TypeDeclKind: TypeDeclKind = {
+    Constructor+          => TypeDeclKind::Sum(<>),
+    BlockList<",", Field> => TypeDeclKind::Product(<>)
 }
 
-Param : (Pattern, TypeNode) = {
-    "(" <pat:Pattern> <typ: TypeAnotation> ")" => (pat, typ)
+TypeDecl: TypeDecl = {
+    "type" <name: UpperId> <params: LowerId*> "=" <constructors: TypeDeclKind> => TypeDecl {<>}
 }
 
-FnDecl : FnDecl = {
-    "fn" <name: Loc<Id>> <params: Param*> <ret: TypeAnotation?> <body: Block> => FnDecl::new(
-        name,
-        params,
-        ret,
-        body
-    )
-} 
+TypeAnotation: TypeNode = ":" <TypeNode>;
 
-TopLevelKind : TopLevelKind = {
-    <FnDecl> => TopLevelKind::FnDecl(<>), 
-    <TypeDecl> => TopLevelKind::TypeDecl(<>), 
+Param: (Pattern, TypeNode) = "(" <Pattern> <TypeAnotation> ")" => (<>);
+
+FnDecl: FnDecl = "fn" <Loc<LowerId>> <Param*> <TypeAnotation?> <BlockExpr> => FnDecl::new(<>);
+
+TopLevelKind: TopLevelKind = {
+    FnDecl   => TopLevelKind::FnDecl(<>), 
+    TypeDecl => TopLevelKind::TypeDecl(<>), 
 }
 
-TopLevel : TopLevel = Loc<TopLevelKind>;
+TopLevel: TopLevel = Loc<TopLevelKind>;
 
-pub Program : Vec<TopLevel> = {
-    <TopLevel*> => <>
+pub Program: Vec<TopLevel> = TopLevel*;
+
+Num: u64 = r"[0-9]+" => u64::from_str(<>).unwrap();
+
+LowerId: String =  {
+    r"[a-z]"               => <>.to_string(),
+    r"[a-z_][a-zA-Z0-9_]+" => <>.to_string(),
 }
 
-Num: u64 = <s:r"[0-9]+">                   => u64::from_str(s).unwrap();
-Id: String =  {
-    <s:r"[a-zA-Z]">               => s.to_string(),
-    <s:r"[a-zA-Z_][a-zA-Z0-9_]+"> => s.to_string(),
+UpperId: String = r"[A-Z][a-zA-Z0-9_]*" => <>.to_string();
+
+Id: String = {
+    LowerId,
+    UpperId,
 }

@@ -37,8 +37,6 @@ impl<'a> Infer<'a> for Pattern {
                 Tuple(vec) => Rc::new(MonoType::Tuple(
                     vec.into_iter().map(|pat| pat.infer((ctx, set))).collect(),
                 )),
-
-                Group(expr) => expr.infer((ctx, set)),
             },
 
             PatternKind::Constructor(name, args) => {

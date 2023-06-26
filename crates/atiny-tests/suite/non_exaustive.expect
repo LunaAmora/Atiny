@@ -1,5 +1,5 @@
 
-[error]: non-exhaustive pattern match: Cons (true, false) Nil
+[error]: non-exhaustive pattern match: Cons (True, False) Nil
 
     ┌─> non_exaustive.at:5:11
     │
@@ -7,6 +7,6 @@
     │           ^^^
     │
   9 │         Nil                         => 4,
- 10 │         Cons (true, false) Nil => _,
+ 10 │         Cons (True, False) Nil => _,
     │         ++++++++++++++++++++++++++++
     │

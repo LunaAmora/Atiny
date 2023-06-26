@@ -6,7 +6,7 @@ use crate::context::InferError;
 use crate::exhaustive::Problem;
 use crate::{context::Ctx, types::*, unify::unify};
 
-use atiny_tree::elaborated::{self, CaseTree, Symbol, VariableNode};
+use atiny_tree::elaborated::{self, CaseTree, Stmt, Symbol, VariableNode};
 use atiny_tree::r#abstract::*;
 
 use itertools::Itertools;
@@ -49,8 +49,6 @@ impl Infer<'_> for &Expr {
 
                     None => ctx.new_error(format!("unbound variable '{}'", x)),
                 },
-
-                Group(expr) => expr.infer(ctx),
             },
 
             Application(fun, arg) => {
@@ -93,18 +91,6 @@ impl Infer<'_> for &Expr {
                 };
 
                 (MonoType::arrow(t, t_line), abs)
-            }
-
-            Let(x, e0, e1) => {
-                let lvl_ctx = ctx.level_up();
-                let (t, el0) = e0.infer(lvl_ctx);
-                let t_generalized = t.generalize(ctx.clone());
-
-                let new_ctx = ctx.extend(x.to_owned(), t_generalized);
-
-                let (inferred, el1) = e1.infer(new_ctx);
-                let expr = Elaborated::Let(Symbol(x.to_owned()), Box::new(el0), Box::new(el1));
-                (inferred, expr)
             }
 
             Match(e, clauses) => {
@@ -365,7 +351,44 @@ impl Infer<'_> for &Expr {
 
                 (field_ty, record_field)
             }
+
+            Block(statements) => statements.infer(ctx),
         }
+    }
+}
+
+impl Infer<'_> for &[Statement] {
+    type Context = Ctx;
+    type Return = (Type, Elaborated);
+
+    fn infer(self, mut ctx: Self::Context) -> Self::Return {
+        let mut elab = Vec::with_capacity(self.len());
+        let mut last = None;
+
+        for next in self.iter() {
+            match next {
+                Statement::Let(x, e0) => {
+                    let (t, el0) = e0.infer(ctx.clone().level_up());
+                    let t_generalized = t.generalize(ctx.clone());
+
+                    ctx = ctx.extend(x.to_owned(), t_generalized);
+                    elab.push(Stmt::Let(Symbol(x.to_owned()), el0));
+                    last = None;
+                }
+
+                Statement::Expr(expr) => {
+                    let (exp, el) = expr.infer(ctx.clone());
+                    elab.push(Stmt::Expr(el));
+                    last = Some(exp);
+                }
+            }
+        }
+
+        let Some(ret) = last else {
+            todo!("report that let statements cant be at the end of a block");
+        };
+
+        (ret, Elaborated::Block(elab))
     }
 }
 

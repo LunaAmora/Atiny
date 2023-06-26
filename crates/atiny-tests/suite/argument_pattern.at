@@ -1,4 +1,4 @@
-type Bool = | true | false
+type Bool = | True | False
 type Box t = | Boxed t
 type DoubleBox t v = | DBox t v
 

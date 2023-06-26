@@ -199,10 +199,7 @@ impl Matrix {
     /// constructor on the context.
     fn get_used_constructor(ctx: &Ctx, pat: &PatternKind) -> Option<String> {
         match pat {
-            PatternKind::Atom(AtomKind::Identifier(id)) if ctx.lookup_cons(id).is_some() => {
-                Some(id.clone())
-            }
-            PatternKind::Atom(AtomKind::Group(pat)) => Self::get_used_constructor(ctx, &pat.data),
+            PatternKind::Atom(AtomKind::Identifier(id)) => ctx.lookup_cons(id).map(|_| id.clone()),
             PatternKind::Constructor(name, _) => Some(name.clone()),
             _ => None,
         }
@@ -623,7 +620,6 @@ impl Case<Pattern> {
                 .map_or_else(|| Self::Wildcard, |cons| Self::Constructor(cons, vec![])),
             AtomKind::Number(number) => Self::Int(number),
             AtomKind::Tuple(tuple) => Self::Tuple(tuple),
-            AtomKind::Group(g) => Self::from_pattern(ctx, g.data),
         }
     }
 }

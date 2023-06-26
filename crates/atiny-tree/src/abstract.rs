@@ -14,7 +14,6 @@ pub enum AtomKind<T> {
     Number(u64),
     Tuple(Vec<T>),
     Identifier(String),
-    Group(Box<T>),
 }
 
 impl<T> AtomKind<T> {
@@ -30,8 +29,19 @@ impl<T: Display> Display for AtomKind<T> {
             Self::Number(n) => write!(f, "{n}"),
             Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Identifier(id) => write!(f, "{id}"),
-            Self::Group(id) => write!(f, "({id})"),
         }
+    }
+}
+
+impl From<AtomKind<Expr>> for ExprKind {
+    fn from(value: AtomKind<Expr>) -> Self {
+        Self::Atom(value)
+    }
+}
+
+impl From<AtomKind<Pattern>> for PatternKind {
+    fn from(value: AtomKind<Pattern>) -> Self {
+        Self::Atom(value)
     }
 }
 
@@ -48,6 +58,21 @@ impl Display for ExprField {
     }
 }
 
+#[derive(Debug)]
+pub enum Statement {
+    Let(String, Expr),
+    Expr(Expr),
+}
+
+impl Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Let(n, v) => write!(f, "let {n} = {v}"),
+            Self::Expr(e) => write!(f, "{e}"),
+        }
+    }
+}
+
 /// Expressions are language constructions that intrinsically contains a return value. E.g
 ///
 /// ```atiny
@@ -60,10 +85,10 @@ pub enum ExprKind {
     Match(Box<Expr>, Vec<Clause>),
     Abstraction(String, Box<Expr>),
     Application(Box<Expr>, Box<Expr>),
-    Let(String, Box<Expr>, Box<Expr>),
     Annotation(Box<Expr>, Box<TypeNode>),
     RecordCreation(Box<Expr>, Vec<ExprField>),
     Field(Box<Expr>, String),
+    Block(Vec<Statement>),
 }
 
 impl Display for ExprKind {
@@ -73,10 +98,10 @@ impl Display for ExprKind {
             Self::Abstraction(p, e) => write!(f, "(|{p}| {e})"),
             Self::Annotation(p, e) => write!(f, "({p} : {e})"),
             Self::Application(fu, a) => write!(f, "({fu} {a})"),
-            Self::Let(n, v, next) => write!(f, "(let {n} = {v}; {next})"),
             Self::Match(e, c) => write!(f, "{e} {{{}}}", c.iter().join(", ")),
             Self::RecordCreation(n, fields) => write!(f, "{n} {{ {} }}", fields.iter().join(", ")),
             Self::Field(e, n) => write!(f, "{e}.{n}"),
+            Self::Block(b) => write!(f, "{{{}}}", b.iter().join("; ")),
         }
     }
 }
@@ -164,6 +189,15 @@ impl Display for Clause {
 pub struct ArrowNode {
     pub left: Box<TypeNode>,
     pub right: Box<TypeNode>,
+}
+
+impl ArrowNode {
+    pub fn new(left: TypeNode, right: TypeNode) -> Self {
+        Self {
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
 }
 
 impl Display for ArrowNode {
@@ -369,7 +403,7 @@ impl Display for FnDecl {
 
         write!(
             f,
-            "fn {} {} : {} {{{}}}",
+            "fn {} {} : {} {}",
             self.name, params, self.ret, self.body
         )
     }
