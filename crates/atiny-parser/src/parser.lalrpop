@@ -10,6 +10,7 @@ Loc<T>: Located<T> = {
 }
 
 //         (Vec,Trailing)
+#[inline]
 Sep<U, T>: (Vec<T>, bool) = {
     <mut v:(<T> U)*> <e:T?> => match e {
         Some(e) => {
@@ -49,14 +50,17 @@ Call: Expr = {
     AtomExpr
 };
 
+Item<E>: ExprKind = {
+    "if" "let" <Pattern> "=" <E>
+        <BlockExpr> "else" <BlockExpr>       => ExprKind::if_let(<>),
+    "|" <t:LowerId> "|" <e:E>                => ExprKind::Abstraction(t, Box::new(e)),
+    "match" <e:E> <c:BlockList<",", Clause>> => ExprKind::Match(Box::new(e), c),
+} 
+
 ExprItem: ExprKind = {
-    "|" <t:LowerId> "|" <s:Expr>                  => ExprKind::Abstraction(t, Box::new(s)),
-    "match" <pat:Expr> <c:BlockList<",", Clause>> => ExprKind::Match(Box::new(pat), c),
-    <f:Call> <t:TypeAnotation>                    => ExprKind::Annotation(Box::new(f), Box::new(t)),
-    <t:Call> "#" <f:BlockList<",", ExprField>>    => ExprKind::RecordCreation(Box::new(t), f),
-    <f:AtomExpr> "." <name:LowerId>               => ExprKind::Field(Box::new(f), name),
-    
-    "if" "let" <Pattern> "=" <Expr> <BlockExpr> "else" <BlockExpr> => ExprKind::if_let(<>),
+    Item<InnerExpr>,
+    <f:AtomExpr> "." <name:LowerId> => ExprKind::Field(Box::new(f), name),
+    <f:Call> <t:TypeAnotation>      => ExprKind::Annotation(Box::new(f), Box::new(t)),
 };
 
 Statement: Statement = {
@@ -71,10 +75,23 @@ Block: Vec<Statement> = {
 
 BlockExpr: Expr = Loc<Block> => <>.map(|block|  ExprKind::Block(block));
 
-pub Expr: Expr = {
+#[inline]
+InnerExpr: Expr = {
     Loc<ExprItem>,
     BlockExpr,
-    Call
+    Call,
+}
+
+RecordItem: ExprKind = {
+    <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f)
+}
+
+OuterItem: ExprKind = Item<Loc<RecordItem>>;
+
+pub Expr: Expr = {
+    Loc<OuterItem>,
+    Loc<RecordItem>,
+    InnerExpr,
 };
 
 AtomPattern: Pattern = Loc<AtomItem<Pattern, PatternItem>>;
