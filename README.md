@@ -39,7 +39,7 @@ type User = {
 }
 
 fn main (x: List Bool) : Int {
-    let user = User #{
+    let user = User {
         alive = True,
         numbers_chosen = Cons 1 (Cons 2 (Cons 3 Nil))
     };
