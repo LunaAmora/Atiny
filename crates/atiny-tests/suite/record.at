@@ -6,11 +6,11 @@ type User a = {
 }
 
 fn main : Int {
-    let user = User #{
+    let user = User {
         name = Str,
         age = 20
     };
-    let update = user #{
+    let update = user {
         age = 21
     };
     update.age
