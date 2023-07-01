@@ -121,6 +121,16 @@ impl ExprKind {
             ],
         )
     }
+
+    pub fn infix<T: Display>(left: Expr, infix: Located<T>, right: Expr) -> Self {
+        let location = ByteRange(left.location.0, infix.location.1);
+        let call = infix.map(|i| Self::Atom(AtomKind::Identifier(i.to_string())));
+        
+        let data = Self::Application(Box::new(call), Box::new(left));
+        let app = Located { data, location };
+    
+        Self::Application(Box::new(app), Box::new(right))
+    }
 }
 
 /// An atiny expression is some syntactic element that intrinsically has a value. It can be a literal
