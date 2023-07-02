@@ -14,7 +14,7 @@ impl<'a> Infer<'a> for Pattern {
 
     fn infer(self, (ctx, set): Self::Context) -> Self::Return {
         use AtomKind::*;
-        *ctx = ctx.set_position(self.location);
+        ctx.set_position(self.location);
 
         match self.data {
             PatternKind::Atom(a) => match a {

@@ -201,7 +201,7 @@ impl<'a> Infer<'a> for (String, Expr) {
             let witness = problem.exhaustiveness(ctx);
 
             let _ = witness.result().map_err(|err| {
-                new_ctx.location = arg_pat.location;
+                new_ctx.set_position(arg_pat.location);
                 new_ctx.error(format!(
                     "refutable pattern in function argument. pattern `{}` not covered",
                     err

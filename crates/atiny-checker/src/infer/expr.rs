@@ -22,7 +22,7 @@ impl Infer<'_> for &Expr {
     fn infer(self, mut ctx: Self::Context) -> Self::Return {
         use AtomKind::*;
         use ExprKind::*;
-        ctx = ctx.set_position(self.location);
+        ctx.set_position(self.location);
 
         match &self.data {
             Atom(a) => match a {
@@ -106,7 +106,7 @@ impl Infer<'_> for &Expr {
                     let pat_loc = c.pat.location;
 
                     let clause_pat = c.pat.clone().infer((&mut ctx, &mut set));
-                    ctx = ctx.set_position(pat_loc);
+                    ctx.set_position(pat_loc);
 
                     unify(ctx.clone(), pat_ty.clone(), clause_pat);
 
@@ -127,7 +127,7 @@ impl Infer<'_> for &Expr {
                             let column = vec![column_pat.clone()];
                             let problem = Problem::new(pat_ty.clone(), column, columns.clone());
 
-                            ctx.location = column_pat.location;
+                            ctx.set_position(column_pat.location);
                             let witness = problem.exhaustiveness(&ctx);
 
                             if !witness.is_non_exhaustive() {
@@ -148,10 +148,10 @@ impl Infer<'_> for &Expr {
                     witness.result().map_or_else(
                         |err| {
                             let last_pat_loc = ctx.location;
-                            ctx.location = e.location;
+                            ctx.set_position(e.location);
                             ctx.error(format!("non-exhaustive pattern match: {}", err));
 
-                            ctx.location = last_pat_loc;
+                            ctx.set_position(last_pat_loc);
                             ctx.suggestion(format!("{} => _,", err));
                             Elaborated::Error
                         },
@@ -173,7 +173,7 @@ impl Infer<'_> for &Expr {
             RecordCreation(expr, user_fields) => match &expr.data {
                 Atom(AtomKind::Identifier(name)) if ctx.lookup_type(name).is_some() => {
                     let err_count = ctx.err_count();
-                    let ctx = ctx.set_position(expr.location);
+                    ctx.set_position(expr.location);
                     let typ = ctx.lookup_type(name).unwrap();
 
                     let Some((record, ret_type)) = ctx.inst_sig_as_record(typ, name.to_owned())
@@ -181,7 +181,7 @@ impl Infer<'_> for &Expr {
                         return ctx.new_error(format!("the type '{typ}' is not a record"));
                     };
 
-                    let elab_fields = user_fields.infer((&ctx, record, true));
+                    let elab_fields = user_fields.infer((ctx.clone(), record, true));
 
                     let elaborated = if err_count != ctx.err_count() {
                         Elaborated::Error
@@ -203,7 +203,7 @@ impl Infer<'_> for &Expr {
 
                     unify(ctx.clone(), ret_type.clone(), expr_ty);
 
-                    let elab_fields = user_fields.infer((&ctx, record, false));
+                    let elab_fields = user_fields.infer((ctx.clone(), record, false));
 
                     let elaborated = if err_count != ctx.err_count() {
                         Elaborated::Error
@@ -217,7 +217,7 @@ impl Infer<'_> for &Expr {
 
             Field(expr, field) => {
                 let (expr_ty, elab_expr) = expr.infer(ctx.clone());
-                let ctx = ctx.set_position(expr.location);
+                ctx.set_position(expr.location);
 
                 let Some((record, ret_type)) = ctx.as_record_info(&expr_ty) else {
                     return ctx.new_error(format!("the type '{expr_ty}' is not a record"));
@@ -264,7 +264,7 @@ impl Infer<'_> for &[Statement] {
         for next in self.iter() {
             match next {
                 Statement::Let(x, e0) => {
-                    let (t, el0) = e0.infer(ctx.clone().level_up());
+                    let (t, el0) = e0.infer(ctx.level_up());
                     let t_generalized = t.generalize(ctx.clone());
 
                     ctx = ctx.extend(x.to_owned(), t_generalized);
@@ -296,11 +296,11 @@ impl InferError<(Type, Elaborated)> for Ctx {
 }
 
 impl<'a> Infer<'a> for &[ExprField] {
-    type Context = (&'a Ctx, RecordInfo<'a>, bool);
+    type Context = (Ctx, RecordInfo<'a>, bool);
     type Return = Vec<(Symbol, Elaborated)>;
 
     fn infer(self, ctx: Self::Context) -> Self::Return {
-        let (ctx, record, exaustive) = ctx;
+        let (mut ctx, record, exaustive) = ctx;
 
         let fields_map: HashMap<_, _> = record.fields.iter().map(|(s, t)| (s, t)).collect();
         let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
@@ -311,7 +311,7 @@ impl<'a> Infer<'a> for &[ExprField] {
 
             if fields_map.contains_key(name) {
                 if fields_to_remove.contains(&name) {
-                    let ctx = ctx.set_position(expr.location);
+                    ctx.set_position(expr.location);
 
                     fields_to_remove.remove(&name);
 

@@ -104,10 +104,8 @@ impl Ctx {
     }
 
     /// Sets the current location that we are type checking inside of the context.
-    pub fn set_position(&self, location: ByteRange) -> Self {
-        let mut c = self.clone();
-        c.location = location;
-        c
+    pub fn set_position(&mut self, location: ByteRange) {
+        self.location = location;
     }
 
     /// Creates a new name for a type variable.
