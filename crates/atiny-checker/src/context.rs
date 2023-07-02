@@ -52,6 +52,16 @@ impl Default for Ctx {
             TypeSignature::new_opaque("Int".to_string()),
         );
 
+        let int = MonoType::typ("Int".to_string());
+        let sig = MonoType::arrow(int.clone(), MonoType::arrow(int.clone(), int)).to_poly();
+
+        ctx.map.extend([
+            ("add".to_string(), sig.clone()),
+            ("sub".to_string(), sig.clone()),
+            ("mul".to_string(), sig.clone()),
+            ("div".to_string(), sig),
+        ]);
+
         ctx.extend_type_sigs(iter::once(TypeDecl::unit()));
 
         ctx

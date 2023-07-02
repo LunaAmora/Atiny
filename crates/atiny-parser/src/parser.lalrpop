@@ -88,11 +88,32 @@ RecordItem: ExprKind = {
 
 OuterItem: ExprKind = Item<Loc<RecordItem>>;
 
-pub Expr: Expr = {
+Term: Expr = {
     Loc<OuterItem>,
     Loc<RecordItem>,
     InnerExpr,
 };
+
+InfixItem<Left, Infix, Right>: ExprKind = Left Loc<Infix> Right => ExprKind::infix(<>);
+
+InfixExpr<Left, Infix, Right>: Expr = {
+    Loc<InfixItem<Left, Infix, Right>>,
+    Right,
+}
+
+pub Expr: Expr = InfixExpr<Expr, Infix0, Factor>;
+
+Factor: Expr = InfixExpr<Factor, Infix1, Term>;
+
+Infix0: &'input str = {
+    "+" => "add",
+    "-" => "sub",
+}
+
+Infix1: &'input str = {
+    "*" => "mul",
+    "/" => "div",
+}
 
 AtomPattern: Pattern = Loc<AtomItem<Pattern, PatternItem>>;
 
