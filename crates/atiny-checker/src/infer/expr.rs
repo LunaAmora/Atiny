@@ -176,126 +176,34 @@ impl Infer<'_> for &Expr {
                     let ctx = ctx.set_position(expr.location);
                     let typ = ctx.lookup_type(name).unwrap();
 
-                    if let TypeValue::Product(fields) = &typ.value {
-                        let mut elab_fields = vec![];
+                    let Some((record, ret_type)) = ctx.inst_sig_as_record(typ, name.to_owned())
+                    else {
+                        return ctx.new_error(format!("the type '{typ}' is not a record"));
+                    };
 
-                        let (ret_type, vars) = TypeScheme {
-                            names: typ.params.clone(),
-                            mono: typ.application(),
-                        }
-                        .instantiate(ctx.clone());
+                    let elab_fields = user_fields.infer((&ctx, record, true));
 
-                        let fields_map: HashMap<_, _> =
-                            fields.iter().map(|(s, t)| (s, t)).collect();
-                        let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
-
-                        for ExprField { name, expr } in user_fields {
-                            let (field_ty, field_expr) = expr.infer(ctx.clone());
-
-                            if fields_map.contains_key(name) {
-                                if fields_to_remove.contains(&name) {
-                                    let ctx = ctx.set_position(expr.location);
-
-                                    fields_to_remove.remove(&name);
-
-                                    let field = *fields_map.get(name).unwrap();
-
-                                    let field = TypeScheme {
-                                        names: typ.params.clone(),
-                                        mono: field.clone(),
-                                    }
-                                    .instantiate_with(&vars);
-
-                                    unify(ctx.clone(), field_ty, field.clone());
-
-                                    elab_fields.push((Symbol(name.to_owned()), field_expr));
-                                } else {
-                                    ctx.error(format!("field '{name}' is duplicated"));
-                                }
-                            } else {
-                                ctx.error(format!(
-                                    "field '{name}' does not exist in type '{name}'"
-                                ));
-                            }
-                        }
-
-                        if !fields_to_remove.is_empty() && !fields_map.is_empty() {
-                            ctx.error(format!(
-                                "fields {} are missing",
-                                fields_to_remove.iter().join(", ")
-                            ));
-                        }
-
-                        let elaborated = if err_count != ctx.err_count() {
-                            Elaborated::Error
-                        } else {
-                            Elaborated::RecordCreation(Symbol(name.to_owned()), elab_fields)
-                        };
-
-                        (ret_type, elaborated)
+                    let elaborated = if err_count != ctx.err_count() {
+                        Elaborated::Error
                     } else {
-                        ctx.new_error(format!("the type '{typ}' is not a record"))
-                    }
+                        Elaborated::RecordCreation(Symbol(name.to_owned()), elab_fields)
+                    };
+
+                    (ret_type, elaborated)
                 }
 
                 _ => {
                     let err_count = ctx.err_count();
                     let (expr_ty, elab_expr) = expr.infer(ctx.clone());
-                    let constructor = expr_ty.get_constructor();
 
-                    let Some(
-                        type_signature @ TypeSignature {
-                            value: TypeValue::Product(fields),
-                            ..
-                        },
-                    ) = constructor.as_ref().and_then(|name| ctx.lookup_type(name)) else {
+                    let Some((record, ret_type)) = ctx.as_record_info(&expr_ty) else {
                         ctx.error(format!("the type '{expr_ty}' is not a record"));
-                        return (expr_ty, Elaborated::Error)
+                        return (expr_ty, Elaborated::Error);
                     };
-
-                    let mut elab_fields = vec![];
-
-                    let fields_map: HashMap<_, _> = fields.iter().map(|(s, t)| (s, t)).collect();
-                    let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
-
-                    let (ret_type, vars) = TypeScheme {
-                        names: type_signature.params.clone(),
-                        mono: type_signature.application(),
-                    }
-                    .instantiate(ctx.clone());
 
                     unify(ctx.clone(), ret_type.clone(), expr_ty);
 
-                    for ExprField { name, expr } in user_fields {
-                        let (field_ty, field_expr) = expr.infer(ctx.clone());
-
-                        if fields_map.contains_key(&name) {
-                            if fields_to_remove.contains(&name) {
-                                let ctx = ctx.set_position(expr.location);
-
-                                fields_to_remove.remove(&name);
-
-                                let field = *fields_map.get(&name).unwrap();
-
-                                let field = TypeScheme {
-                                    names: type_signature.params.clone(),
-                                    mono: field.clone(),
-                                }
-                                .instantiate_with(&vars);
-
-                                unify(ctx.clone(), field_ty, field.clone());
-
-                                elab_fields.push((Symbol(name.to_owned()), field_expr));
-                            } else {
-                                ctx.error(format!("field '{name}' is duplicated"));
-                            }
-                        } else {
-                            ctx.error(format!(
-                                "field '{name}' does not exist in type '{}'",
-                                constructor.clone().unwrap()
-                            ));
-                        }
-                    }
+                    let elab_fields = user_fields.infer((&ctx, record, false));
 
                     let elaborated = if err_count != ctx.err_count() {
                         Elaborated::Error
@@ -308,43 +216,31 @@ impl Infer<'_> for &Expr {
             },
 
             Field(expr, field) => {
+                let (expr_ty, elab_expr) = expr.infer(ctx.clone());
                 let ctx = ctx.set_position(expr.location);
 
-                let (expr_ty, elab_expr) = expr.infer(ctx.clone());
-                let constructor = expr_ty.get_constructor();
-
-                let Some(
-                    type_signature @ TypeSignature {
-                        value: TypeValue::Product(fields),
-                        ..
-                    },
-                ) = constructor.as_ref().and_then(|name| ctx.lookup_type(name)) else {
+                let Some((record, ret_type)) = ctx.as_record_info(&expr_ty) else {
                     return ctx.new_error(format!("the type '{expr_ty}' is not a record"));
                 };
 
-                let Some((_, field_cons)) = fields.iter().find(|(name, _)| name == field) else {
+                let Some((_, field_cons)) = record.fields.iter().find(|(name, _)| name == field)
+                else {
                     return ctx.new_error(format!(
                         "field '{field}' does not exist in type '{}'",
-                        constructor.unwrap()
-                    ))
+                        record.id
+                    ));
                 };
-
-                let (ret_type, vars) = TypeScheme {
-                    names: type_signature.params.clone(),
-                    mono: type_signature.application(),
-                }
-                .instantiate(ctx.clone());
 
                 unify(ctx.clone(), ret_type, expr_ty);
 
                 let field_ty = TypeScheme {
-                    names: type_signature.params.clone(),
+                    names: record.params.to_vec(),
                     mono: field_cons.clone(),
                 }
-                .instantiate_with(&vars);
+                .instantiate_with(&record.vars);
 
                 let record_field = Elaborated::RecordField(
-                    Symbol(constructor.unwrap()),
+                    Symbol(record.id),
                     Box::new(elab_expr),
                     Symbol(field.clone()),
                 );
@@ -396,5 +292,97 @@ impl InferError<(Type, Elaborated)> for Ctx {
     fn new_error(&self, msg: String) -> (Type, Elaborated) {
         self.error(msg);
         (Rc::new(MonoType::Error), Elaborated::Error)
+    }
+}
+
+impl<'a> Infer<'a> for &[ExprField] {
+    type Context = (&'a Ctx, RecordInfo<'a>, bool);
+    type Return = Vec<(Symbol, Elaborated)>;
+
+    fn infer(self, ctx: Self::Context) -> Self::Return {
+        let (ctx, record, exaustive) = ctx;
+
+        let fields_map: HashMap<_, _> = record.fields.iter().map(|(s, t)| (s, t)).collect();
+        let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
+        let mut elab_fields = vec![];
+
+        for ExprField { name, expr } in self {
+            let (field_ty, field_expr) = expr.infer(ctx.clone());
+
+            if fields_map.contains_key(name) {
+                if fields_to_remove.contains(&name) {
+                    let ctx = ctx.set_position(expr.location);
+
+                    fields_to_remove.remove(&name);
+
+                    let field = fields_map[name];
+
+                    let field = TypeScheme {
+                        names: record.params.to_vec(),
+                        mono: field.clone(),
+                    }
+                    .instantiate_with(&record.vars);
+
+                    unify(ctx.clone(), field_ty, field.clone());
+
+                    elab_fields.push((Symbol(name.to_owned()), field_expr));
+                } else {
+                    ctx.error(format!("field '{name}' is duplicated"));
+                }
+            } else {
+                ctx.error(format!(
+                    "field '{name}' does not exist in type '{}'",
+                    record.id
+                ));
+            }
+        }
+
+        if exaustive && !fields_to_remove.is_empty() && !fields_map.is_empty() {
+            ctx.error(format!(
+                "fields {} are missing",
+                fields_to_remove.iter().join(", ")
+            ));
+        }
+
+        elab_fields
+    }
+}
+
+pub struct RecordInfo<'a> {
+    id: String,
+    fields: &'a [(String, Type)],
+    params: &'a [String],
+    vars: Vec<Type>,
+}
+
+impl Ctx {
+    fn as_record_info(&self, expr_ty: &Type) -> Option<(RecordInfo<'_>, Type)> {
+        expr_ty.get_constructor().and_then(|name| {
+            self.lookup_type(&name)
+                .and_then(|typ| self.inst_sig_as_record(typ, name))
+        })
+    }
+
+    fn inst_sig_as_record<'a>(
+        &'a self,
+        sig: &'a TypeSignature,
+        id: String,
+    ) -> Option<(RecordInfo<'_>, Type)> {
+        sig.get_product().map(|fields| {
+            let (ret_type, vars) = TypeScheme {
+                names: sig.params.clone(),
+                mono: sig.application(),
+            }
+            .instantiate(self.clone());
+
+            let record = RecordInfo {
+                id,
+                fields,
+                params: sig.params.as_slice(),
+                vars,
+            };
+
+            (record, ret_type)
+        })
     }
 }
