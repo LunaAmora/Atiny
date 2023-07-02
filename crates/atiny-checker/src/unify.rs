@@ -26,7 +26,7 @@ impl Display for TypeMismatch {
 }
 
 /// Tries to find a general unifier for two types, it fails if these two types are not "equal".
-pub fn unify(ctx: Ctx, left: Rc<MonoType>, right: Rc<MonoType>) {
+pub fn unify(ctx: Ctx, left: Type, right: Type) {
     if Rc::ptr_eq(&left, &right) {
         return;
     }
@@ -74,7 +74,7 @@ pub fn unify(ctx: Ctx, left: Rc<MonoType>, right: Rc<MonoType>) {
 }
 
 /// This function unifies a hole with a type.
-fn unify_hole(ctx: Ctx, hole: &Ref, other: Rc<MonoType>, swap: bool) {
+fn unify_hole(ctx: Ctx, hole: &Ref, other: Type, swap: bool) {
     match hole.get() {
         Hole::Empty(lvl) => match occur_check(hole, lvl, other.clone()) {
             Err(occurs_check) => ctx.error(occurs_check.to_string()),
@@ -88,7 +88,7 @@ fn unify_hole(ctx: Ctx, hole: &Ref, other: Rc<MonoType>, swap: bool) {
 /// Checks if a hole occur inside a type. It can lead to infinite types so we must not continue
 /// after that. It also changes the level of an empty hole to the minimum between the two holes in
 /// order to fix the level to the current region.
-fn occur_check(hole: &Ref, lvl: usize, other: Rc<MonoType>) -> Result<(), OccursCheck> {
+fn occur_check(hole: &Ref, lvl: usize, other: Type) -> Result<(), OccursCheck> {
     match &*other {
         MonoType::Application(_, args) => {
             for arg in args.clone() {

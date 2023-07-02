@@ -17,7 +17,7 @@ impl Infer<'_> for &TypeNode {
             TypeKind::Arrow(arrow) => {
                 let left = arrow.left.infer(ctx.clone());
                 let right = arrow.right.infer(ctx);
-                MonoType::arrow(left, right)
+                left.arrow(right)
             }
 
             TypeKind::Variable(v) => {

@@ -56,7 +56,7 @@ impl Infer<'_> for &Expr {
                 let (t1, elab_arg) = arg.infer(ctx.clone());
 
                 let t_return = ctx.new_hole();
-                let function_type = MonoType::arrow(t1, t_return.clone());
+                let function_type = t1.arrow(t_return.clone());
 
                 unify(ctx, t0, function_type);
 
@@ -90,7 +90,7 @@ impl Infer<'_> for &Expr {
                     _ => Elaborated::Abstraction(symbols, Box::new(elab_body)),
                 };
 
-                (MonoType::arrow(t, t_line), abs)
+                (t.arrow(t_line), abs)
             }
 
             Match(e, clauses) => {
@@ -392,8 +392,8 @@ impl Infer<'_> for &[Statement] {
     }
 }
 
-impl InferError<(Rc<MonoType>, Elaborated)> for Ctx {
-    fn new_error(&self, msg: String) -> (Rc<MonoType>, Elaborated) {
+impl InferError<(Type, Elaborated)> for Ctx {
+    fn new_error(&self, msg: String) -> (Type, Elaborated) {
         self.error(msg);
         (Rc::new(MonoType::Error), Elaborated::Error)
     }

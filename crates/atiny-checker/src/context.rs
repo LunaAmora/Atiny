@@ -186,7 +186,7 @@ impl Ctx {
     }
 
     /// Creates a new hole type.
-    pub fn new_hole(&self) -> Rc<MonoType> {
+    pub fn new_hole(&self) -> Type {
         MonoType::new_hole(self.new_name(), self.level)
     }
 }
@@ -195,8 +195,8 @@ pub trait InferError<T> {
     fn new_error(&self, msg: String) -> T;
 }
 
-impl InferError<Rc<MonoType>> for Ctx {
-    fn new_error(&self, msg: String) -> Rc<MonoType> {
+impl InferError<Type> for Ctx {
+    fn new_error(&self, msg: String) -> Type {
         self.error(msg);
         Rc::new(MonoType::Error)
     }
