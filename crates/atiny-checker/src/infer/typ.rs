@@ -10,14 +10,14 @@ impl Infer<'_> for &TypeNode {
     type Context = Ctx;
     type Return = Type;
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
-        let ctx = ctx.set_position(self.location);
+    fn infer(self, mut ctx: Self::Context) -> Self::Return {
+        ctx.set_position(self.location);
 
         match &self.data {
             TypeKind::Arrow(arrow) => {
                 let left = arrow.left.infer(ctx.clone());
                 let right = arrow.right.infer(ctx);
-                MonoType::arrow(left, right)
+                left.arrow(right)
             }
 
             TypeKind::Variable(v) => {

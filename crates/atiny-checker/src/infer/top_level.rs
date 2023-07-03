@@ -201,7 +201,7 @@ impl<'a> Infer<'a> for (String, Expr) {
             let witness = problem.exhaustiveness(ctx);
 
             let _ = witness.result().map_err(|err| {
-                new_ctx.location = arg_pat.location;
+                new_ctx.set_position(arg_pat.location);
                 new_ctx.error(format!(
                     "refutable pattern in function argument. pattern `{}` not covered",
                     err
@@ -246,7 +246,7 @@ impl Ctx {
         }
     }
 
-    fn insert_pattern_bind(&mut self, pattern: &Pattern, pattern_type: Rc<MonoType>) {
+    fn insert_pattern_bind(&mut self, pattern: &Pattern, pattern_type: Type) {
         match (&pattern.data, &*pattern_type) {
             (PatternKind::Atom(atom), _) => {
                 self.map.insert(atom.to_string(), pattern_type.to_poly());

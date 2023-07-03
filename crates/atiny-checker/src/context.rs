@@ -104,29 +104,19 @@ impl Ctx {
     }
 
     /// Sets the current location that we are type checking inside of the context.
-    pub fn set_position(&self, location: ByteRange) -> Self {
-        let mut c = self.clone();
-        c.location = location;
-        c
+    pub fn set_position(&mut self, location: ByteRange) {
+        self.location = location;
     }
 
     /// Creates a new name for a type variable.
     pub fn new_name(&self) -> String {
-        fn format_radix(mut x: usize, radix: usize) -> String {
-            let mut result = vec![];
-            loop {
-                let m = x % radix;
-                x /= radix;
-                result.push(std::char::from_u32((m + 96) as u32).unwrap());
-                if x == 0 {
-                    break;
-                }
-            }
-            format!("'{}", result.into_iter().rev().collect::<String>())
-        }
+        let counter = {
+            let mut counter = self.counter.borrow_mut();
+            *counter += 1;
+            *counter
+        };
 
-        *self.counter.borrow_mut() += 1;
-        format_radix(*self.counter.borrow(), 26)
+        format!("'{}", (97 + ((counter - 1) % 26)) as u8 as char)
     }
 
     /// Looks up a type variable name in the context.
@@ -186,7 +176,7 @@ impl Ctx {
     }
 
     /// Creates a new hole type.
-    pub fn new_hole(&self) -> Rc<MonoType> {
+    pub fn new_hole(&self) -> Type {
         MonoType::new_hole(self.new_name(), self.level)
     }
 }
@@ -195,8 +185,8 @@ pub trait InferError<T> {
     fn new_error(&self, msg: String) -> T;
 }
 
-impl InferError<Rc<MonoType>> for Ctx {
-    fn new_error(&self, msg: String) -> Rc<MonoType> {
+impl InferError<Type> for Ctx {
+    fn new_error(&self, msg: String) -> Type {
         self.error(msg);
         Rc::new(MonoType::Error)
     }

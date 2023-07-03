@@ -12,8 +12,8 @@ impl Check<'_> for &Expr {
     type Context = Ctx;
     type Result = Elaborated;
 
-    fn check(self, ctx: Self::Context, expected: Type) -> Self::Result {
-        let ctx = ctx.set_position(self.location);
+    fn check(self, mut ctx: Self::Context, expected: Type) -> Self::Result {
+        ctx.set_position(self.location);
 
         let (infer, elaborated) = self.infer(ctx.clone());
         unify(ctx, infer, expected);

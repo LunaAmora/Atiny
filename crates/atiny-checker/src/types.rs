@@ -175,7 +175,7 @@ impl Ref {
 }
 
 /// A type that is not generalized but can contain arrow types, tuples and holes as part of it.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum MonoType {
     Var(String),
     Tuple(Vec<Type>),
@@ -183,6 +183,24 @@ pub enum MonoType {
     Hole(Ref),
     Application(String, Vec<Type>),
     Error,
+}
+
+impl Display for MonoType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Var(name) => write!(f, "{}", name),
+            Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
+            Self::Arrow(from, to) => write!(f, "({} -> {})", from, to),
+            Self::Hole(item) => match item.get() {
+                Hole::Filled(typ) => write!(f, "{}", typ),
+                Hole::Empty(0) => write!(f, "^{}", item.0.borrow().name),
+                Hole::Empty(lvl) => write!(f, "^{lvl}~{}", item.0.borrow().name),
+            },
+            Self::Application(name, args) if args.is_empty() => write!(f, "{}", name),
+            Self::Application(name, args) => write!(f, "({} {})", name, args.iter().join(" ")),
+            Self::Error => write!(f, "_"),
+        }
+    }
 }
 
 impl MonoType {
@@ -215,35 +233,12 @@ impl MonoType {
     }
 
     pub fn rfold_arrow<I: DoubleEndedIterator<Item = Type>>(iter: I, end: Type) -> Type {
-        iter.rfold(end, |x, y| Self::arrow(y, x))
+        iter.rfold(end, |x, y| y.arrow(x))
     }
-}
 
-impl Display for MonoType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Var(name) => write!(f, "{}", name),
-            Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
-            Self::Arrow(from, to) => write!(f, "({} -> {})", from, to),
-            Self::Hole(item) => match item.get() {
-                Hole::Filled(typ) => write!(f, "{}", typ),
-                Hole::Empty(0) => write!(f, "^{}", item.0.borrow().name),
-                Hole::Empty(lvl) => write!(f, "^{lvl}~{}", item.0.borrow().name),
-            },
-            Self::Application(name, args) if args.is_empty() => write!(f, "{}", name),
-            Self::Application(name, args) => write!(f, "({} {})", name, args.iter().join(" ")),
-            Self::Error => write!(f, "_"),
-        }
-    }
-}
-
-impl MonoType {
-    pub fn substitute(&self, substs: &BTreeMap<String, Rc<Self>>) -> Rc<Self> {
-        match self {
-            Self::Var(name) => substs
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| Rc::new(Self::Var(name.clone()))),
+    pub fn substitute(self: &Type, substs: &BTreeMap<String, Type>) -> Type {
+        match &**self {
+            Self::Var(name) => substs.get(name).cloned().unwrap_or_else(|| self.clone()),
 
             Self::Tuple(vec) => Rc::new(Self::Tuple(
                 vec.iter().map(|mono| mono.substitute(substs)).collect(),
@@ -255,7 +250,7 @@ impl MonoType {
 
             Self::Hole(item) => match item.get() {
                 Hole::Filled(typ) => typ.substitute(substs),
-                Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
+                Hole::Empty(_) => self.clone(),
             },
 
             Self::Application(string, args) => Rc::new(Self::Application(
@@ -263,16 +258,14 @@ impl MonoType {
                 args.iter().map(|a| a.substitute(substs)).collect(),
             )),
 
-            Self::Error => Rc::new(Self::Error),
+            Self::Error => self.clone(),
         }
     }
-}
 
-impl MonoType {
-    pub fn to_poly(&self) -> Rc<TypeScheme> {
+    pub fn to_poly(self: &Type) -> Rc<TypeScheme> {
         Rc::new(TypeScheme {
             names: vec![],
-            mono: Rc::new(self.clone()),
+            mono: self.clone(),
         })
     }
 
@@ -280,25 +273,25 @@ impl MonoType {
         Rc::new(Self::Tuple(vec))
     }
 
-    pub fn var(name: String) -> Rc<Self> {
+    pub fn var(name: String) -> Type {
         Rc::new(Self::Var(name))
     }
 
-    pub fn typ(name: String) -> Rc<Self> {
+    pub fn typ(name: String) -> Type {
         Rc::new(Self::Application(name, vec![]))
     }
 
-    pub fn arrow(from: Rc<Self>, to: Rc<Self>) -> Rc<Self> {
-        Rc::new(Self::Arrow(from, to))
+    pub fn arrow(self: Type, to: Type) -> Type {
+        Rc::new(Self::Arrow(self, to))
     }
 
-    pub fn new_hole(name: String, level: usize) -> Rc<Self> {
+    pub fn new_hole(name: String, level: usize) -> Type {
         Rc::new(Self::Hole(Ref::new(name, level)))
     }
 
-    fn generalize_type(&self, ctx: Ctx, holes: &mut BTreeMap<Ref, String>) -> Rc<Self> {
-        match self {
-            Self::Var(_) => Rc::new(self.clone()),
+    fn generalize_type(self: &Type, ctx: Ctx, holes: &mut BTreeMap<Ref, String>) -> Type {
+        match &**self {
+            Self::Var(_) => self.clone(),
 
             Self::Tuple(vec) => Rc::new(Self::Tuple(
                 vec.iter()
@@ -317,21 +310,22 @@ impl MonoType {
                     let name = holes.entry(item.clone()).or_insert_with(|| ctx.new_name());
                     Self::var(name.clone())
                 }
-                Hole::Empty(_) => Rc::new(Self::Hole(item.clone())),
+                Hole::Empty(_) => self.clone(),
             },
 
             Self::Application(fun, args) => Rc::new(Self::Application(
                 fun.clone(),
                 args.iter()
+                    .cloned()
                     .map(|a| a.generalize_type(ctx.clone(), holes))
                     .collect(),
             )),
 
-            Self::Error => Rc::new(Self::Error),
+            Self::Error => self.clone(),
         }
     }
 
-    pub fn generalize(&self, ctx: Ctx) -> Rc<TypeScheme> {
+    pub fn generalize(self: Type, ctx: Ctx) -> Rc<TypeScheme> {
         let mut names = Default::default();
 
         let mono = self.generalize_type(ctx, &mut names);
@@ -417,7 +411,7 @@ impl Display for DeclSignature {
 #[derive(Clone, Debug)]
 pub enum TypeValue {
     Sum(Vec<Rc<ConstructorSignature>>),
-    Product(Vec<(String, Rc<MonoType>)>),
+    Product(Vec<(String, Type)>),
     Opaque,
 }
 
@@ -460,6 +454,13 @@ impl TypeSignature {
             ),
             TypeValue::Opaque => None,
             TypeValue::Product(_) => todo!(),
+        }
+    }
+
+    pub fn get_product(&self) -> Option<&[(String, Type)]> {
+        match &self.value {
+            TypeValue::Product(prod) => Some(prod),
+            _ => None,
         }
     }
 }
