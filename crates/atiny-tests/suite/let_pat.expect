@@ -1,0 +1,22 @@
+
+[error]: refutable pattern in let statement. Consider using `match` instead
+
+    ┌─> let_pat.at:5:9
+    │
+  5 │     let Cons _ (Cons a b) = x;
+    │         ^^^^^^^^^^^^^^^^^
+    │
+  5+│     match x {
+  6+│         Cons _ Cons a b => _,
+  7+│         Nil => _,
+    │
+
+[error]: type mismatch between '(List Bool)' and 'Bool'
+
+    ┌─> let_pat.at:4:31
+    │
+  4 │ fn main (x: List Bool) : Bool {
+  5 │     let Cons _ (Cons a b) = x;
+  6 │     b
+  7 │ }
+    │

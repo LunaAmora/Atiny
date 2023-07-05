@@ -59,12 +59,12 @@ impl Display for ExprField {
 }
 
 #[derive(Debug)]
-pub enum Statement {
-    Let(String, Expr),
+pub enum StatementKind {
+    Let(Pattern, Expr),
     Expr(Expr),
 }
 
-impl Display for Statement {
+impl Display for StatementKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Let(n, v) => write!(f, "let {n} = {v}"),
@@ -72,6 +72,8 @@ impl Display for Statement {
         }
     }
 }
+
+pub type Statement = Located<StatementKind>;
 
 /// Expressions are language constructions that intrinsically contains a return value. E.g
 ///

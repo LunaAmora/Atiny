@@ -1,21 +1,22 @@
-use core::fmt;
+use core::fmt::{Formatter, Result};
 use std::fmt::Display;
 
 use atiny_location::{ByteRange, Point, Range};
 
 pub enum ErrorKind {
-    Static(String),
-    Sugestion(String),
+    Static(Message),
+    Sugestion(Message, SugestionKind),
     Dynamic(Box<dyn Fn() -> String>),
 }
 
-impl Display for ErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Static(s) | Self::Sugestion(s) => write!(f, "{}", s),
-            Self::Dynamic(d) => write!(f, "{}", d()),
-        }
-    }
+pub enum Message {
+    Single(String),
+    Multi(Vec<String>),
+}
+
+pub enum SugestionKind {
+    Insert,
+    Replace,
 }
 
 pub struct Error {
@@ -24,16 +25,16 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(message: impl Into<String>, location: ByteRange) -> Self {
+    pub fn new(message: Message, location: ByteRange) -> Self {
         Self {
-            message: ErrorKind::Static(message.into()),
+            message: ErrorKind::Static(message),
             location,
         }
     }
 
-    pub fn new_sugestion(message: impl Into<String>, location: ByteRange) -> Self {
+    pub fn new_sugestion(message: Message, kind: SugestionKind, location: ByteRange) -> Self {
         Self {
-            message: ErrorKind::Sugestion(message.into()),
+            message: ErrorKind::Sugestion(message, kind),
             location,
         }
     }
@@ -60,8 +61,28 @@ pub struct ErrorWithCode<'a> {
     file_name: &'a str,
 }
 
+const PAD: usize = 3;
+
+fn write_lines(f: &mut Formatter<'_>, code: &str, line_start: usize, line_end: usize) -> Result {
+    for (line, line_number) in code.lines().skip(line_start).zip(line_start..=line_end) {
+        writeln!(f, "{:>PAD$} │ {}", line_number + 1, line)?;
+    }
+    Ok(())
+}
+
+fn write_err_header<'a>(f: &mut Formatter<'_>, a: impl IntoIterator<Item = &'a String>) -> Result {
+    for (i, s) in a.into_iter().enumerate() {
+        if i == 0 {
+            writeln!(f, "\n[error]: {s}\n")?;
+        } else {
+            writeln!(f, "         {s}\n")?;
+        }
+    }
+    Ok(())
+}
+
 impl<'a> Display for ErrorWithCode<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let Self {
             err: Error { message, location },
             code,
@@ -69,31 +90,44 @@ impl<'a> Display for ErrorWithCode<'a> {
         } = self;
 
         let Range(start @ Point { line, column }, end) = location.locate(code);
-        const PAD: usize = 3;
-
-        let print_lines = |f: &mut fmt::Formatter<'_>| -> fmt::Result {
-            for (line, line_number) in code.lines().skip(line).zip(line..=end.line) {
-                writeln!(f, "{:>PAD$} │ {}", line_number + 1, line)?;
-            }
-            Ok(())
-        };
 
         match message {
-            ErrorKind::Sugestion(sugestion) => {
-                print_lines(f)?;
+            ErrorKind::Sugestion(sugestion, kind) => {
+                if matches!(kind, SugestionKind::Insert) {
+                    write_lines(f, code, line, end.line)?;
+                }
 
-                let sugestion = sugestion.to_string();
-                let size = sugestion.len();
-                writeln!(f, "{:>PAD$} │ {:>column$}{sugestion}", end.line + 2, "")?;
-                writeln!(f, "{:>PAD$} │ {:>column$}{:+>size$}", "", "", "")?;
+                let end_line = match kind {
+                    SugestionKind::Insert => end.line + 2,
+                    SugestionKind::Replace => end.line + 1,
+                };
+
+                match sugestion {
+                    Message::Single(s) => {
+                        let size = s.len();
+                        writeln!(f, "{:>PAD$} │ {:>column$}{s}", end_line, "")?;
+                        writeln!(f, "{:>PAD$} │ {:>column$}{:+>size$}", "", "", "")?;
+                    }
+                    Message::Multi(ms) => {
+                        for (i, m) in ms.iter().enumerate() {
+                            writeln!(f, "{:>PAD$}+│ {:>column$}{m}", end_line + i, "")?;
+                        }
+                    }
+                }
             }
 
             error => {
-                writeln!(f, "\n[error]: {error}\n")?;
+                match error {
+                    ErrorKind::Static(Message::Single(s)) => write_err_header(f, Some(s))?,
+                    ErrorKind::Static(Message::Multi(m)) => write_err_header(f, m)?,
+                    ErrorKind::Dynamic(d) => write_err_header(f, Some(&d()))?,
+                    ErrorKind::Sugestion(..) => unreachable!(),
+                };
+
                 writeln!(f, "{:>PAD$} ┌─> {file_name}:{start}", "")?;
                 writeln!(f, "{:>PAD$} │", "",)?;
 
-                print_lines(f)?;
+                write_lines(f, code, line, end.line)?;
 
                 if line == end.line {
                     let size = end.column - column;

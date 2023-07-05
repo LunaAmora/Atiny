@@ -63,14 +63,14 @@ ExprItem: ExprKind = {
     <f:Call> <t:TypeAnotation>      => ExprKind::Annotation(Box::new(f), Box::new(t)),
 };
 
-Statement: Statement = {
-    "let" <LowerId> "=" <Expr> => Statement::Let(<>),
-    Expr => Statement::Expr(<>)
+Statement: StatementKind = {
+    "let" <Pattern> "=" <Expr> => StatementKind::Let(<>),
+    Expr => StatementKind::Expr(<>)
 }
 
 Block: Vec<Statement> = {
-    Loc<r"[{][\s]*[}]"> => vec![Statement::Expr(<>.map(|_| ExprKind::Atom(AtomKind::unit())))],
-    BlockList<";", Statement>
+    Loc<r"[{][\s]*[}]"> => vec![<>.clone().map(|_| StatementKind::Expr(<>.map(|_| ExprKind::Atom(AtomKind::unit()))))],
+    BlockList<";", Loc<Statement>>
 };
 
 BlockExpr: Expr = Loc<Block> => <>.map(|block|  ExprKind::Block(block));

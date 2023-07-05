@@ -15,10 +15,10 @@ pub mod typ;
 ///         G |- |x| e => a' -> b'
 /// ```
 ///
-pub trait Infer<'a> {
-    type Context;
+pub trait Infer {
+    type Context<'a>;
     type Return;
 
     /// Infers the type of an expression.
-    fn infer(self, ctx: Self::Context) -> Self::Return;
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return;
 }

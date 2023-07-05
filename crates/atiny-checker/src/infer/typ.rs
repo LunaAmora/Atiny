@@ -6,11 +6,11 @@ use crate::{context::*, types::*};
 use atiny_tree::r#abstract::{TypeKind, TypeNode};
 use std::rc::Rc;
 
-impl Infer<'_> for &TypeNode {
-    type Context = Ctx;
+impl Infer for &TypeNode {
+    type Context<'a> = Ctx;
     type Return = Type;
 
-    fn infer(self, mut ctx: Self::Context) -> Self::Return {
+    fn infer(self, mut ctx: Self::Context<'_>) -> Self::Return {
         ctx.set_position(self.location);
 
         match &self.data {

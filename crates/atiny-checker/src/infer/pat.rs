@@ -1,18 +1,17 @@
 use super::Infer;
-use crate::{
-    context::{Ctx, InferError},
-    types::{MonoType, Type},
-    unify::unify,
-};
+use crate::context::{Ctx, InferError};
+use crate::exhaustive::{Problem, Witness};
+use crate::types::{MonoType, Type};
+use crate::unify::unify;
 
-use atiny_tree::r#abstract::{AtomKind, Pattern, PatternKind};
+use atiny_tree::r#abstract::{wildcard, AtomKind, Pattern, PatternKind};
 use std::{collections::HashSet, rc::Rc};
 
-impl<'a> Infer<'a> for Pattern {
-    type Context = (&'a mut Ctx, &'a mut HashSet<String>);
+impl Infer for Pattern {
+    type Context<'a> = (&'a mut Ctx, &'a mut HashSet<String>);
     type Return = Type;
 
-    fn infer(self, (ctx, set): Self::Context) -> Self::Return {
+    fn infer(self, (ctx, set): Self::Context<'_>) -> Self::Return {
         use AtomKind::*;
         ctx.set_position(self.location);
 
@@ -68,6 +67,39 @@ impl<'a> Infer<'a> for Pattern {
 
                 typ
             }
+        }
+    }
+}
+
+impl Ctx {
+    pub fn single_exhaustiveness(&mut self, pattern: &Pattern, pattern_type: Type) -> Witness {
+        let mut set = HashSet::new();
+        let cons_pat = pattern.clone().infer((self, &mut set));
+
+        unify(self.clone(), cons_pat.clone(), pattern_type.clone());
+        self.extend_with_pattern(pattern, pattern_type);
+
+        let problem = Problem::new(cons_pat, vec![wildcard()], vec![pattern.clone()]);
+        problem.exhaustiveness(self)
+    }
+
+    pub fn extend_with_pattern(&mut self, pattern: &Pattern, pattern_type: Type) {
+        match (&pattern.data, &*pattern_type) {
+            (PatternKind::Atom(AtomKind::Wildcard), _) => {}
+
+            (PatternKind::Atom(atom), _) => {
+                self.map.insert(atom.to_string(), pattern_type.to_poly());
+            }
+
+            (PatternKind::Constructor(_, patterns), MonoType::Application(_, apps)) => {
+                for (arg, app) in patterns.iter().zip(apps.iter()) {
+                    self.extend_with_pattern(arg, app.clone());
+                }
+            }
+
+            (_, MonoType::Error) => {}
+
+            (_, _) => unreachable!(),
         }
     }
 }

@@ -97,7 +97,7 @@ impl Row {
 
     /// Prepends a pattern to a row.
     fn prepend(mut self, pat: Pattern) -> Self {
-        self.1 = iter::once(pat).chain(self.1.into_iter()).collect();
+        self.1 = iter::once(pat).chain(self.1).collect();
         self
     }
 
@@ -586,7 +586,7 @@ impl Problem {
                 self.specialize(ctx, types.clone(), pat, Case::Tuple(vec![(); types.len()]))
             }
 
-            (Case::Int(n), _) => self.specialize(ctx, iter::empty(), iter::empty(), Case::Int(n)),
+            (Case::Int(n), _) => self.specialize(ctx, None, None, Case::Int(n)),
 
             _ => unimplemented!(),
         }
