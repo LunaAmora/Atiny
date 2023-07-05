@@ -1,4 +1,4 @@
-use crate::{check::Check, context::Ctx, exhaustive::Problem, infer::Infer, types::*};
+use crate::{check::Check, context::Ctx, infer::Infer, types::*};
 use atiny_tree::{elaborated::FnBody, r#abstract::*};
 use itertools::Itertools;
 use std::{collections::HashSet, iter, rc::Rc};
@@ -196,21 +196,15 @@ impl Infer for (String, Expr) {
         let mut new_ctx = ctx.extend_types(sig.type_variables());
 
         for (arg_pat, arg_type) in &sig.args {
-            let mut set = HashSet::new();
-            let cons_pat = arg_pat.clone().infer((&mut new_ctx, &mut set));
+            let witness = new_ctx.single_exhaustiveness(arg_pat, arg_type.clone());
 
-            let problem = Problem::new(cons_pat, vec![wildcard()], vec![arg_pat.clone()]);
-            let witness = problem.exhaustiveness(ctx);
-
-            let _ = witness.result().map_err(|err| {
+            if let Err(err) = witness.result() {
                 new_ctx.set_position(arg_pat.location);
                 new_ctx.error(format!(
                     "refutable pattern in function argument. pattern `{}` not covered",
                     err
                 ));
-            });
-
-            new_ctx.insert_pattern_bind(arg_pat, arg_type.clone());
+            };
         }
 
         FnBody(body.check(new_ctx, sig.return_type()))
@@ -245,24 +239,6 @@ impl Ctx {
                     self.free_variables(arg, set);
                 }
             }
-        }
-    }
-
-    fn insert_pattern_bind(&mut self, pattern: &Pattern, pattern_type: Type) {
-        match (&pattern.data, &*pattern_type) {
-            (PatternKind::Atom(atom), _) => {
-                self.map.insert(atom.to_string(), pattern_type.to_poly());
-            }
-
-            (PatternKind::Constructor(_, patterns), MonoType::Application(_, apps)) => {
-                for (arg, app) in patterns.iter().zip(apps.iter()) {
-                    self.insert_pattern_bind(arg, app.clone());
-                }
-            }
-
-            (_, MonoType::Error) => {}
-
-            (_, _) => unreachable!(),
         }
     }
 }
