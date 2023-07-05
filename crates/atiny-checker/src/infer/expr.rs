@@ -6,6 +6,7 @@ use crate::context::InferError;
 use crate::exhaustive::Problem;
 use crate::{context::Ctx, types::*, unify::unify};
 
+use atiny_error::SugestionKind;
 use atiny_tree::elaborated::{self, CaseTree, Stmt, Symbol, VariableNode};
 use atiny_tree::r#abstract::*;
 
@@ -148,7 +149,7 @@ impl Infer for &Expr {
                             ctx.error(format!("non-exhaustive pattern match: {}", err));
 
                             ctx.set_position(last_pat_loc);
-                            ctx.suggestion(format!("{} => _,", err));
+                            ctx.suggestion(format!("{} => _,", err), SugestionKind::Insert);
                             Elaborated::Error
                         },
                         |tree| Elaborated::CaseTree(Box::new(scrutinee), CaseTree { tree, places }),

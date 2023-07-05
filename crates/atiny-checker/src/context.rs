@@ -3,7 +3,7 @@
 
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use atiny_error::Error;
+use atiny_error::{Error, Message, SugestionKind};
 use atiny_location::ByteRange;
 use atiny_tree::r#abstract::TypeDecl;
 use itertools::Itertools;
@@ -146,13 +146,29 @@ impl Ctx {
     pub fn error(&self, msg: String) {
         self.errors
             .borrow_mut()
-            .push(Error::new(msg, self.location));
+            .push(Error::new(Message::Single(msg), self.location));
     }
 
-    pub fn suggestion(&self, msg: String) {
+    pub fn errors(&self, msg: Vec<String>) {
         self.errors
             .borrow_mut()
-            .push(Error::new_sugestion(msg, self.location));
+            .push(Error::new(Message::Multi(msg), self.location));
+    }
+
+    pub fn suggestion(&self, msg: String, sugestion_kind: SugestionKind) {
+        self.errors.borrow_mut().push(Error::new_sugestion(
+            Message::Single(msg),
+            sugestion_kind,
+            self.location,
+        ));
+    }
+
+    pub fn suggestions(&self, msg: Vec<String>, sugestion_kind: SugestionKind) {
+        self.errors.borrow_mut().push(Error::new_sugestion(
+            Message::Multi(msg),
+            sugestion_kind,
+            self.location,
+        ));
     }
 
     pub fn dyn_error(&self, msg: impl Display + 'static) {
