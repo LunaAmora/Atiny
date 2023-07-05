@@ -15,11 +15,11 @@ use std::rc::Rc;
 
 type Elaborated = elaborated::Expr<Type>;
 
-impl Infer<'_> for &Expr {
-    type Context = Ctx;
+impl Infer for &Expr {
+    type Context<'a> = Ctx;
     type Return = (Type, Elaborated);
 
-    fn infer(self, mut ctx: Self::Context) -> Self::Return {
+    fn infer(self, mut ctx: Self::Context<'_>) -> Self::Return {
         use AtomKind::*;
         use ExprKind::*;
         ctx.set_position(self.location);
@@ -52,42 +52,38 @@ impl Infer<'_> for &Expr {
             },
 
             Application(fun, arg) => {
-                let (t0, elab_fun) = fun.infer(ctx.clone());
+                let (t0, mut elab_fun) = fun.infer(ctx.clone());
                 let (t1, elab_arg) = arg.infer(ctx.clone());
 
-                let t_return = ctx.new_hole();
-                let function_type = t1.arrow(t_return.clone());
+                let t_ret = ctx.new_hole();
+                let function_type = t1.arrow(t_ret.clone());
 
                 unify(ctx, t0, function_type);
 
                 let appl = match elab_fun {
-                    Elaborated::Application(fun, mut args, typ) => {
+                    Elaborated::Application(_, ref mut args, _) => {
                         args.push(elab_arg);
-                        Elaborated::Application(fun, args, typ)
+                        elab_fun
                     }
-                    _ => Elaborated::Application(
-                        Box::new(elab_fun),
-                        vec![elab_arg],
-                        t_return.clone(),
-                    ),
+                    _ => Elaborated::Application(Box::new(elab_fun), vec![elab_arg], t_ret.clone()),
                 };
 
-                (t_return, appl)
+                (t_ret, appl)
             }
 
             Abstraction(param, body) => {
                 let t = ctx.new_hole();
                 let new_ctx = ctx.extend(param.to_owned(), t.to_poly());
-                let (t_line, elab_body) = body.infer(new_ctx);
+                let (t_line, mut elab_body) = body.infer(new_ctx);
 
-                let mut symbols = vec![Symbol(param.to_owned())];
+                let symbol = Symbol(param.to_owned());
 
                 let abs = match elab_body {
-                    Elaborated::Abstraction(param1, body1) => {
-                        symbols.extend(param1);
-                        Elaborated::Abstraction(symbols, body1)
+                    Elaborated::Abstraction(ref mut args, _) => {
+                        args.push_back(symbol);
+                        elab_body
                     }
-                    _ => Elaborated::Abstraction(symbols, Box::new(elab_body)),
+                    _ => Elaborated::Abstraction([symbol].into(), Box::new(elab_body)),
                 };
 
                 (t.arrow(t_line), abs)
@@ -253,11 +249,11 @@ impl Infer<'_> for &Expr {
     }
 }
 
-impl Infer<'_> for &[Statement] {
-    type Context = Ctx;
+impl Infer for &[Statement] {
+    type Context<'a> = Ctx;
     type Return = (Type, Elaborated);
 
-    fn infer(self, mut ctx: Self::Context) -> Self::Return {
+    fn infer(self, mut ctx: Self::Context<'_>) -> Self::Return {
         let mut elab = Vec::with_capacity(self.len());
         let mut last = None;
 
@@ -295,11 +291,11 @@ impl InferError<(Type, Elaborated)> for Ctx {
     }
 }
 
-impl<'a> Infer<'a> for &[ExprField] {
-    type Context = (Ctx, RecordInfo<'a>, bool);
+impl Infer for &[ExprField] {
+    type Context<'a> = (Ctx, RecordInfo<'a>, bool);
     type Return = Vec<(Symbol, Elaborated)>;
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (mut ctx, record, exaustive) = ctx;
 
         let fields_map: HashMap<_, _> = record.fields.iter().map(|(s, t)| (s, t)).collect();

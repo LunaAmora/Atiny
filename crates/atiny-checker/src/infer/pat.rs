@@ -8,11 +8,11 @@ use crate::{
 use atiny_tree::r#abstract::{AtomKind, Pattern, PatternKind};
 use std::{collections::HashSet, rc::Rc};
 
-impl<'a> Infer<'a> for Pattern {
-    type Context = (&'a mut Ctx, &'a mut HashSet<String>);
+impl Infer for Pattern {
+    type Context<'a> = (&'a mut Ctx, &'a mut HashSet<String>);
     type Return = Type;
 
-    fn infer(self, (ctx, set): Self::Context) -> Self::Return {
+    fn infer(self, (ctx, set): Self::Context<'_>) -> Self::Return {
         use AtomKind::*;
         ctx.set_position(self.location);
 

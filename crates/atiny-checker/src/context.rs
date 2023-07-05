@@ -1,7 +1,7 @@
 //! The context is primarily a list of bindings from variable names to type that is on the left side
 //! of a type judgment.
 
-use std::{cell::RefCell, fmt::Display, iter, rc::Rc};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use atiny_error::Error;
 use atiny_location::ByteRange;
@@ -62,7 +62,7 @@ impl Default for Ctx {
             ("div".to_string(), sig),
         ]);
 
-        ctx.extend_type_sigs(iter::once(TypeDecl::unit()));
+        ctx.extend_type_sigs(Some(TypeDecl::unit()));
 
         ctx
     }

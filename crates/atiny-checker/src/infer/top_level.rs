@@ -4,15 +4,17 @@ use itertools::Itertools;
 use std::{collections::HashSet, iter, rc::Rc};
 
 impl Ctx {
-    pub fn extend_type_sigs<T: Iterator<Item = TypeDecl>>(&mut self, iter: T) {
-        iter.map(|type_decl| type_decl.infer(self))
+    pub fn extend_type_sigs(&mut self, iter: impl IntoIterator<Item = TypeDecl>) {
+        iter.into_iter()
+            .map(|type_decl| type_decl.infer(self))
             .collect_vec()
             .into_iter()
             .for_each(|constr| constr.infer(self));
     }
 
-    pub fn extend_fun_sigs<T: Iterator<Item = FnDecl>>(&mut self, iter: T) -> Vec<FnBody<Type>> {
-        iter.map(|fun_decl| fun_decl.infer(self))
+    pub fn extend_fun_sigs(&mut self, iter: impl IntoIterator<Item = FnDecl>) -> Vec<FnBody<Type>> {
+        iter.into_iter()
+            .map(|fun_decl| fun_decl.infer(self))
             .collect_vec()
             .into_iter()
             .map(|body| body.infer(self))
@@ -20,24 +22,24 @@ impl Ctx {
     }
 }
 
-impl<'a> Infer<'a> for Vec<TopLevel> {
-    type Context = &'a mut Ctx;
+impl Infer for Vec<TopLevel> {
+    type Context<'a> = &'a mut Ctx;
     type Return = Vec<FnBody<Type>>;
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let mut fn_vec = Vec::new();
         let top_iter = TopIter::new(self, &mut fn_vec);
 
         ctx.extend_type_sigs(top_iter);
-        ctx.extend_fun_sigs(fn_vec.into_iter())
+        ctx.extend_fun_sigs(fn_vec)
     }
 }
 
-impl<'a> Infer<'a> for TypeDecl {
-    type Context = &'a mut Ctx;
+impl Infer for TypeDecl {
+    type Context<'a> = &'a mut Ctx;
     type Return = (String, TypeDeclKind);
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let value = match self.constructors {
             TypeDeclKind::Sum(_) => TypeValue::Sum(Vec::new()),
             TypeDeclKind::Product(_) => TypeValue::Product(Vec::new()),
@@ -55,11 +57,11 @@ impl<'a> Infer<'a> for TypeDecl {
     }
 }
 
-impl<'a> Infer<'a> for (String, TypeDeclKind) {
-    type Context = &'a mut Ctx;
+impl Infer for (String, TypeDeclKind) {
+    type Context<'a> = &'a mut Ctx;
     type Return = ();
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (decl_name, kind) = self;
         let name = iter::repeat(decl_name.as_str());
 
@@ -70,11 +72,11 @@ impl<'a> Infer<'a> for (String, TypeDeclKind) {
     }
 }
 
-impl<'a> Infer<'a> for (&str, Field) {
-    type Context = &'a mut Ctx;
+impl Infer for (&str, Field) {
+    type Context<'a> = &'a mut Ctx;
     type Return = ();
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (decl_name, field) = self;
 
         let Some(TypeSignature { params, .. }) = &ctx.signatures.types.get(decl_name) else {
@@ -99,11 +101,11 @@ impl<'a> Infer<'a> for (&str, Field) {
     }
 }
 
-impl<'a> Infer<'a> for (&str, Constructor) {
-    type Context = &'a mut Ctx;
+impl Infer for (&str, Constructor) {
+    type Context<'a> = &'a mut Ctx;
     type Return = ();
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (decl_name, constr) = self;
 
         let Some(TypeSignature { params, .. }) = &ctx.signatures.types.get(decl_name) else {
@@ -142,11 +144,11 @@ impl<'a> Infer<'a> for (&str, Constructor) {
     }
 }
 
-impl<'a> Infer<'a> for FnDecl {
-    type Context = &'a mut Ctx;
+impl Infer for FnDecl {
+    type Context<'a> = &'a mut Ctx;
     type Return = (String, Expr);
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let mut set = HashSet::new();
 
         for (_, ty) in &self.params {
@@ -180,11 +182,11 @@ impl<'a> Infer<'a> for FnDecl {
     }
 }
 
-impl<'a> Infer<'a> for (String, Expr) {
-    type Context = &'a Ctx;
+impl Infer for (String, Expr) {
+    type Context<'a> = &'a Ctx;
     type Return = FnBody<Type>;
 
-    fn infer(self, ctx: Self::Context) -> Self::Return {
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (fn_name, body) = self;
 
         let Some(DeclSignature::Function(sig)) = ctx.signatures.values.get(&fn_name) else {

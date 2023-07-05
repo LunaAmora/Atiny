@@ -1,6 +1,7 @@
 //! This module defines a tree that contains semantic information. It's widely used for code
 //! generation and some expansions.
 
+use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
@@ -26,7 +27,7 @@ pub enum Expr<T> {
 
     CaseTree(Box<Expr<T>>, CaseTree<T>),
 
-    Abstraction(Vec<Symbol>, Box<Expr<T>>),
+    Abstraction(VecDeque<Symbol>, Box<Expr<T>>),
     Application(Box<Expr<T>>, Vec<Expr<T>>, T),
 
     RecordCreation(Symbol, Vec<(Symbol, Expr<T>)>),
