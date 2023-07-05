@@ -15,7 +15,7 @@ pub struct VariableNode<T> {
 
 #[derive(Debug)]
 pub enum Stmt<T> {
-    Let(Symbol, Expr<T>),
+    Let(CaseTreeNode, Expr<T>),
     Expr(Expr<T>),
 }
 

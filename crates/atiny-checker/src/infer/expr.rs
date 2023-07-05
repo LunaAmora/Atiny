@@ -2,9 +2,10 @@
 
 use super::Infer;
 use crate::check::Check;
-use crate::context::InferError;
+use crate::context::{Ctx, InferError};
 use crate::exhaustive::Problem;
-use crate::{context::Ctx, types::*, unify::unify};
+use crate::types::{MonoType, Type, TypeScheme, TypeSignature};
+use crate::unify::unify;
 
 use atiny_error::SugestionKind;
 use atiny_tree::elaborated::{self, CaseTree, Stmt, Symbol, VariableNode};
@@ -255,24 +256,41 @@ impl Infer for &[Statement] {
     type Return = (Type, Elaborated);
 
     fn infer(self, mut ctx: Self::Context<'_>) -> Self::Return {
-        let mut elab = Vec::with_capacity(self.len());
+        let mut elaborated = Vec::with_capacity(self.len());
         let mut last = None;
 
-        for next in self.iter() {
-            match next {
-                Statement::Let(x, e0) => {
-                    let (t, el0) = e0.infer(ctx.level_up());
-                    let t_generalized = t.generalize(ctx.clone());
+        for stmt in self.iter() {
+            match &stmt.data {
+                StatementKind::Let(pat, exp) => {
+                    let (typ, elab) = exp.infer(ctx.level_up());
+                    let witness = ctx.single_exhaustiveness(pat, typ);
 
-                    ctx = ctx.extend(x.to_owned(), t_generalized);
-                    elab.push(Stmt::Let(Symbol(x.to_owned()), el0));
+                    match witness.result() {
+                        Err(err) => {
+                            ctx.set_position(pat.location);
+                            ctx.error("refutable pattern in let statement. Consider using `match` instead".to_string());
+
+                            ctx.set_position(stmt.location);
+                            ctx.suggestions(
+                                vec![
+                                    format!("match {exp} {{"),
+                                    format!("    {pat} => _,"),
+                                    format!("    {err} => _,"),
+                                ],
+                                SugestionKind::Replace,
+                            );
+                        }
+
+                        Ok(tree) => elaborated.push(Stmt::Let(tree, elab)),
+                    }
+
                     last = None;
                 }
 
-                Statement::Expr(expr) => {
-                    let (exp, el) = expr.infer(ctx.clone());
-                    elab.push(Stmt::Expr(el));
-                    last = Some(exp);
+                StatementKind::Expr(expr) => {
+                    let (typ, elab) = expr.infer(ctx.clone());
+                    elaborated.push(Stmt::Expr(elab));
+                    last = Some(typ);
                 }
             }
         }
@@ -281,7 +299,7 @@ impl Infer for &[Statement] {
             todo!("report that let statements cant be at the end of a block");
         };
 
-        (ret, Elaborated::Block(elab))
+        (ret, Elaborated::Block(elaborated))
     }
 }
 

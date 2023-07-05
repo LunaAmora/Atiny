@@ -1,0 +1,7 @@
+type List t = | Cons t (List t) | Nil
+type Bool = | True | False
+
+fn main (x: List Bool) : Bool {
+    let Cons _ (Cons a b) = x;
+    b
+}
