@@ -1,0 +1,9 @@
+use Lib::List
+use Lib::Bool
+
+fn ata (x: List Bool) : Int {
+    match x {
+        Cons True _ => 2,
+        Nil         => 4,
+    }
+}

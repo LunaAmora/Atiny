@@ -1,12 +1,51 @@
-use crate::{check::Check, context::Ctx, infer::Infer, types::*};
+use crate::context::{Ctx, Imports};
+use crate::program::{Prog, Program};
+use crate::{check::Check, infer::Infer, types::*};
 use atiny_tree::{elaborated::FnBody, r#abstract::*, SeqIter};
 use itertools::Itertools;
 use std::{collections::HashSet, iter, rc::Rc};
 
 impl Ctx {
     pub fn resolve_imports(&mut self, iter: impl IntoIterator<Item = UseDecl>) {
-        for UseDecl(Qualifier(_quali), _item) in iter.into_iter() {
-            todo!();
+        for UseDecl(Qualifier(quali), item) in iter.into_iter() {
+            let file = {
+                let mut prog = self.program.borrow_mut();
+                let path = quali.into_iter().join(".");
+
+                let Ok(file) = prog.file_system.get_file_relative(&path, self.id) else {
+                    todo!()
+                };
+                file
+            };
+
+            let ctx = Program::get_ctx_or_parse(self.program.clone(), file, |mut ctx, parsed| {
+                parsed.infer(&mut ctx);
+            });
+
+            if let Some(item) = item {
+                let mut names = vec![item.data.clone()];
+
+                if let Some(sig) = ctx.lookup_type(&item.data) {
+                    match &sig.value {
+                        TypeValue::Sum(sum) => {
+                            for cons in sum {
+                                names.push(cons.name.clone());
+                            }
+                        }
+                        TypeValue::Product(_) => todo!(),
+                        TypeValue::Opaque => todo!(),
+                    }
+                } else {
+                    self.set_position(item.location);
+                    self.error(format!("could not find `{}` import", item));
+                    //todo: search for other things besides types
+                }
+
+                let mut imports = self.imports.borrow_mut();
+                imports.insert(ctx.id, Imports::Items(names));
+            }
+
+            self.program.borrow_mut().return_ctx(ctx);
         }
     }
 
@@ -26,18 +65,30 @@ impl Ctx {
             .map(|body| body.infer(self))
             .collect()
     }
+
+    pub fn program(self) -> Prog {
+        let prog = self.program.clone();
+        {
+            let program = &mut prog.borrow_mut();
+            program.return_ctx(self);
+        }
+        prog
+    }
 }
 
 impl Infer for Vec<TopLevel> {
     type Context<'a> = &'a mut Ctx;
-    type Return = Vec<FnBody<Type>>;
+    type Return = ();
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let mut top_levels = SeqIter::new(self);
 
         ctx.resolve_imports(&mut top_levels);
         ctx.extend_type_sigs(top_levels.as_iter());
-        ctx.extend_fun_sigs(top_levels.as_iter())
+        let bodies = ctx.extend_fun_sigs(top_levels.as_iter());
+
+        let mut prog = ctx.program.borrow_mut();
+        prog.elaborated.insert(ctx.id, bodies);
     }
 }
 

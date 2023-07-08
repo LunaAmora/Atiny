@@ -5,8 +5,11 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use atiny_error::{Error, Message, SugestionKind};
 use atiny_location::ByteRange;
+use atiny_parser::io::NodeId;
 use atiny_tree::r#abstract::TypeDecl;
 use itertools::Itertools;
+
+use crate::program::Program;
 
 use super::types::*;
 
@@ -25,7 +28,17 @@ impl Display for Signatures {
 }
 
 #[derive(Clone)]
+pub enum Imports {
+    Star,
+    Module,
+    Items(Vec<String>),
+}
+
+#[derive(Clone)]
 pub struct Ctx {
+    pub id: NodeId,
+    pub program: Rc<RefCell<Program>>,
+    pub imports: Rc<RefCell<im_rc::HashMap<NodeId, Imports>>>,
     counter: Rc<RefCell<usize>>,
     pub errors: Rc<RefCell<Vec<Error>>>,
     pub map: im_rc::OrdMap<String, Rc<TypeScheme>>,
@@ -37,7 +50,16 @@ pub struct Ctx {
 
 impl Default for Ctx {
     fn default() -> Self {
+        todo!()
+    }
+}
+
+impl Ctx {
+    pub fn new(id: NodeId, program: Rc<RefCell<Program>>) -> Self {
         let mut ctx = Self {
+            id,
+            program,
+            imports: Default::default(),
             counter: Default::default(),
             errors: Default::default(),
             map: Default::default(),
@@ -121,12 +143,16 @@ impl Ctx {
 
     /// Looks up a type variable name in the context.
     pub fn lookup(&self, name: &str) -> Option<Rc<TypeScheme>> {
-        self.map.get(name).cloned().or_else(|| {
-            self.signatures.values.get(name).map(|decl| match decl {
-                DeclSignature::Function(fun) => fun.entire_type.clone(),
-                DeclSignature::Constructor(decl) => decl.typ.clone(),
+        self.map
+            .get(name)
+            .cloned()
+            .or_else(|| {
+                self.signatures.values.get(name).map(|decl| match decl {
+                    DeclSignature::Function(fun) => fun.entire_type.clone(),
+                    DeclSignature::Constructor(decl) => decl.typ.clone(),
+                })
             })
-        })
+            .or_else(|| self.lookup_on_imports(name, |ctx| ctx.lookup(name)))
     }
 
     pub fn lookup_cons(&self, name: &str) -> Option<Rc<ConstructorSignature>> {
@@ -137,10 +163,36 @@ impl Ctx {
                 DeclSignature::Function(_) => None,
                 DeclSignature::Constructor(cons) => Some(cons.clone()),
             })
+            .or_else(|| self.lookup_on_imports(name, |ctx| ctx.lookup_cons(name)))
     }
 
-    pub fn lookup_type(&self, name: &str) -> Option<&TypeSignature> {
-        self.signatures.types.get(name)
+    pub fn lookup_type(&self, name: &str) -> Option<TypeSignature> {
+        self.signatures
+            .types
+            .get(name)
+            .cloned()
+            .or_else(|| self.lookup_on_imports(name, |ctx| ctx.lookup_type(name)))
+    }
+
+    fn lookup_on_imports<T>(&self, name: &str, lookup: impl Fn(&Self) -> Option<T>) -> Option<T> {
+        for (id, import) in self.imports.borrow().iter() {
+            match import {
+                Imports::Items(items) => {
+                    if items.iter().any(|i| name.eq(i.as_str())) {
+                        return lookup(&self.get_ctx_by_id(id));
+                    };
+                }
+                Imports::Star => return lookup(&self.get_ctx_by_id(id)),
+                Imports::Module => {}
+            }
+        }
+        None
+    }
+
+    fn get_ctx_by_id(&self, id: &NodeId) -> Self {
+        self.program.borrow().modules[id]
+            .clone()
+            .expect("ICE: context was not stored in the program")
     }
 
     pub fn error(&self, msg: String) {

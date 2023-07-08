@@ -50,7 +50,7 @@ impl Infer for &TypeNode {
 
             TypeKind::Application(app) => match ctx.lookup_type(&app.fun) {
                 Some(sig) if sig.params.len() == app.args.len() => Rc::new(MonoType::Application(
-                    sig.name.clone(),
+                    sig.name,
                     app.args.iter().map(|typ| typ.infer(ctx.clone())).collect(),
                 )),
 

@@ -4,11 +4,10 @@
 //!
 //!
 
-use std::{path::PathBuf, process::exit};
+use std::path::PathBuf;
 
-use atiny_checker::context::Ctx;
 use atiny_checker::infer::Infer;
-use atiny_parser::{error::from_lalrpop, ProgramParser};
+use atiny_checker::program::Program;
 use clap::Parser;
 
 #[derive(Parser)]
@@ -20,21 +19,15 @@ enum CargoCli {
 fn main() {
     let CargoCli::TypeCheck { file } = CargoCli::parse();
 
-    let code = std::fs::read_to_string(&file).expect("cannot read file!");
+    Program::new(file).map_or_else(
+        |err| println!("IO error: {}", err),
+        |program| {
+            let ctx = Program::get_entry_or_parse(program, |mut ctx, parsed| {
+                parsed.infer(&mut ctx);
+            });
 
-    let mut ctx = Ctx::default();
-
-    ProgramParser::new()
-        .parse(&code)
-        .map_err(|x| vec![from_lalrpop(x)])
-        .map(|parsed| parsed.infer(&mut ctx))
-        .map(|_| ctx.take_errors())
-        .and_then(|errs| errs.map_or_else(|| Ok(()), Err))
-        .unwrap_or_else(|errs| {
-            for err in errs {
-                eprint!("{}", err.with_code(&code, &file.to_string_lossy()));
-            }
-
-            exit(1)
-        });
+            let program = ctx.program();
+            program.borrow_mut().print_errors();
+        },
+    );
 }

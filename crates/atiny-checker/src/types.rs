@@ -456,13 +456,6 @@ impl TypeSignature {
             TypeValue::Product(_) => todo!(),
         }
     }
-
-    pub fn get_product(&self) -> Option<&[(String, Type)]> {
-        match &self.value {
-            TypeValue::Product(prod) => Some(prod),
-            _ => None,
-        }
-    }
 }
 
 impl Display for TypeValue {

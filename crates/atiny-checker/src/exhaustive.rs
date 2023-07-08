@@ -342,7 +342,7 @@ impl Problem {
             .lookup_type(name)
             .unwrap_or_else(|| panic!("cannot find type '{name}'"));
 
-        match type_sig.value.clone() {
+        match type_sig.value {
             TypeValue::Sum(sum) => {
                 let mut nodes = Vec::new();
 
@@ -556,7 +556,7 @@ impl Problem {
     pub fn match_exhaustiveness(self, ctx: &Ctx, case: Case<Pattern>) -> Witness {
         match (case, &*self.current_type()) {
             (Case::Wildcard, MonoType::Application(n, args)) => match ctx.lookup_type(n) {
-                Some(sig) => self.exhaustiveness_wildcard(ctx, n, args, sig.clone()),
+                Some(sig) => self.exhaustiveness_wildcard(ctx, n, args, sig),
                 None => self.specialize_wildcard(ctx),
             },
 

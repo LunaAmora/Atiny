@@ -3,6 +3,7 @@
 //! not include error recovery strategies nor incremental parsing.
 
 pub mod error;
+pub mod io;
 
 #[macro_use]
 extern crate lalrpop_util;
