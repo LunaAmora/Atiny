@@ -620,6 +620,7 @@ impl Case<Pattern> {
                 .map_or_else(|| Self::Wildcard, |cons| Self::Constructor(cons, vec![])),
             AtomKind::Number(number) => Self::Int(number),
             AtomKind::Tuple(tuple) => Self::Tuple(tuple),
+            AtomKind::Path(_, _) => todo!(),
         }
     }
 }

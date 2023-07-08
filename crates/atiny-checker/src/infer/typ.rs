@@ -21,7 +21,7 @@ impl Infer for &TypeNode {
             }
 
             TypeKind::Variable(v) => {
-                if ctx.signatures.types.get(&v.name).is_some() {
+                if ctx.lookup_type(&v.name).is_some() {
                     MonoType::typ(v.name.to_owned())
                 } else if ctx.typ_map.contains(&v.name) {
                     MonoType::var(v.name.to_owned())
@@ -48,7 +48,7 @@ impl Infer for &TypeNode {
                 .0
             }
 
-            TypeKind::Application(app) => match ctx.signatures.types.get(&app.fun) {
+            TypeKind::Application(app) => match ctx.lookup_type(&app.fun) {
                 Some(sig) if sig.params.len() == app.args.len() => Rc::new(MonoType::Application(
                     sig.name.clone(),
                     app.args.iter().map(|typ| typ.infer(ctx.clone())).collect(),

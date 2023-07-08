@@ -51,6 +51,8 @@ impl Infer for &Expr {
 
                     None => ctx.new_error(format!("unbound variable '{}'", x)),
                 },
+
+                Path(_, _) => todo!(),
             },
 
             Application(fun, arg) => {

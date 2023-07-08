@@ -1,9 +1,15 @@
 use crate::{check::Check, context::Ctx, infer::Infer, types::*};
-use atiny_tree::{elaborated::FnBody, r#abstract::*};
+use atiny_tree::{elaborated::FnBody, r#abstract::*, SeqIter};
 use itertools::Itertools;
 use std::{collections::HashSet, iter, rc::Rc};
 
 impl Ctx {
+    pub fn resolve_imports(&mut self, iter: impl IntoIterator<Item = UseDecl>) {
+        for UseDecl(Qualifier(_quali), _item) in iter.into_iter() {
+            todo!();
+        }
+    }
+
     pub fn extend_type_sigs(&mut self, iter: impl IntoIterator<Item = TypeDecl>) {
         iter.into_iter()
             .map(|type_decl| type_decl.infer(self))
@@ -27,11 +33,11 @@ impl Infer for Vec<TopLevel> {
     type Return = Vec<FnBody<Type>>;
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let mut fn_vec = Vec::new();
-        let top_iter = TopIter::new(self, &mut fn_vec);
+        let mut top_levels = SeqIter::new(self);
 
-        ctx.extend_type_sigs(top_iter);
-        ctx.extend_fun_sigs(fn_vec)
+        ctx.resolve_imports(&mut top_levels);
+        ctx.extend_type_sigs(top_levels.as_iter());
+        ctx.extend_fun_sigs(top_levels.as_iter())
     }
 }
 
@@ -79,7 +85,7 @@ impl Infer for (&str, Field) {
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (decl_name, field) = self;
 
-        let Some(TypeSignature { params, .. }) = &ctx.signatures.types.get(decl_name) else {
+        let Some(TypeSignature { params, .. }) = &ctx.lookup_type(decl_name) else {
             panic!("The String should be a valid type signature name on the Ctx");
         };
 
@@ -108,7 +114,7 @@ impl Infer for (&str, Constructor) {
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (decl_name, constr) = self;
 
-        let Some(TypeSignature { params, .. }) = &ctx.signatures.types.get(decl_name) else {
+        let Some(TypeSignature { params, .. }) = &ctx.lookup_type(decl_name) else {
             panic!("The String should be a valid type signature name on the Ctx");
         };
 
@@ -239,34 +245,6 @@ impl Ctx {
                     self.free_variables(arg, set);
                 }
             }
-        }
-    }
-}
-
-struct TopIter<'a> {
-    vec: Vec<TopLevel>,
-    fn_vec: &'a mut Vec<FnDecl>,
-}
-
-impl<'a> TopIter<'a> {
-    fn new(vec: Vec<TopLevel>, fn_vec: &'a mut Vec<FnDecl>) -> Self {
-        Self { vec, fn_vec }
-    }
-}
-
-impl<'a> Iterator for TopIter<'a> {
-    type Item = TypeDecl;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.vec.pop() {
-            Some(top) => match top.data {
-                TopLevelKind::TypeDecl(typ) => Some(typ),
-                TopLevelKind::FnDecl(fnd) => {
-                    self.fn_vec.push(fnd);
-                    self.next()
-                }
-            },
-            None => None,
         }
     }
 }

@@ -27,7 +27,7 @@ impl Infer for Pattern {
 
                 Identifier(x) if set.insert(x.to_owned()) => {
                     let hole = ctx.new_hole();
-                    *ctx = ctx.extend(x, hole.to_poly());
+                    ctx.map.insert(x, hole.to_poly());
                     hole
                 }
 
@@ -36,6 +36,8 @@ impl Infer for Pattern {
                 Tuple(vec) => Rc::new(MonoType::Tuple(
                     vec.into_iter().map(|pat| pat.infer((ctx, set))).collect(),
                 )),
+
+                Path(_, _) => todo!(),
             },
 
             PatternKind::Constructor(name, args) => {
