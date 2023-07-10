@@ -124,7 +124,7 @@ impl Prog {
     pub fn print_errors(&mut self) {
         if let Some(errs) = self.take_errors() {
             for err in errs {
-                eprintln!("{}", err);
+                eprint!("{}", err);
             }
         }
     }
