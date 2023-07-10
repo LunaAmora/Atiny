@@ -22,8 +22,8 @@ fn main() {
     Program::new(file).map_or_else(
         |err| println!("IO error: {}", err),
         |program| {
-            let ctx = Program::get_entry_or_parse(program, |mut ctx, parsed| {
-                parsed.infer(&mut ctx);
+            let ctx = Program::get_entry_ctx(program, |ctx, parsed: Vec<_>| {
+                parsed.infer(ctx);
             });
 
             let program = ctx.program();

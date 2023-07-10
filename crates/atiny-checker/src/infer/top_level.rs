@@ -18,8 +18,8 @@ impl Ctx {
                 file
             };
 
-            let ctx = Program::get_ctx_or_parse(self.program.clone(), file, |mut ctx, parsed| {
-                parsed.infer(&mut ctx);
+            let ctx = Program::get_ctx(self.program.clone(), file, |ctx, parsed: Vec<_>| {
+                parsed.infer(ctx);
             });
 
             if let Some(item) = item {

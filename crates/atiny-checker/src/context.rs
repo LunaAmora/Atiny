@@ -9,7 +9,7 @@ use atiny_parser::io::NodeId;
 use atiny_tree::r#abstract::TypeDecl;
 use itertools::Itertools;
 
-use crate::program::Program;
+use crate::program::Prog;
 
 use super::types::*;
 
@@ -37,7 +37,7 @@ pub enum Imports {
 #[derive(Clone)]
 pub struct Ctx {
     pub id: NodeId,
-    pub program: Rc<RefCell<Program>>,
+    pub program: Prog,
     pub imports: Rc<RefCell<im_rc::HashMap<NodeId, Imports>>>,
     counter: Rc<RefCell<usize>>,
     pub errors: Rc<RefCell<Vec<Error>>>,
@@ -48,14 +48,8 @@ pub struct Ctx {
     pub signatures: Signatures,
 }
 
-impl Default for Ctx {
-    fn default() -> Self {
-        todo!()
-    }
-}
-
 impl Ctx {
-    pub fn new(id: NodeId, program: Rc<RefCell<Program>>) -> Self {
+    pub fn new(id: NodeId, program: Prog) -> Self {
         let mut ctx = Self {
             id,
             program,
