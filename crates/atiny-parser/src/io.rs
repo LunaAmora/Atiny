@@ -92,7 +92,7 @@ impl<'r, T: VirtualFile> FileSystem<'r, T> {
 
     pub fn new_with(path: &T, reader: impl Reader<T> + 'r) -> io::Result<(Self, NodeId)> {
         let mut vfs = Self::new(path, reader);
-        vfs.add_file(path, dbg!(path.file_name()), None)
+        vfs.add_file(path, path.file_name(), None)
             .map(|id| (vfs, id))
     }
 }
@@ -135,34 +135,28 @@ impl<'r, T: VirtualFile> VirtualFileSystem<T, io::Error> for FileSystem<'r, T> {
     }
 
     fn get_file_from_path(&mut self, path: &str, parent: Option<NodeId>) -> io::Result<File> {
-        let qualifier = path.split('.');
-
+        let mut qualifiers = path.split('.');
         let mut dir = self.get_parent(parent);
-        let mut file = None;
 
-        for ty in qualifier {
-            if file.is_some() {
-                //todo: maybe support this in the future as inner modules
-                panic!("ICE: tried to treat a file as a directory")
-            }
-
-            match dir.find(ty) {
-                Some(NodeId(id)) => match &self.nodes[id] {
-                    Node::File(f) => file = Some(f),
-                    Node::Dir(d) => dir = d,
-                },
-
-                None => {
-                    file = None;
-                    break;
+        while let Some(ty) = qualifiers.next() {
+            match dir
+                .find(&T::from_string(ty).file_name())
+                .or_else(|| dir.find(ty))
+            {
+                Some(NodeId(id)) => {
+                    match &self.nodes[id] {
+                        Node::Dir(node_dir) => dir = node_dir,
+                        Node::File(_) if qualifiers.next().is_some() => {
+                            panic!("ICE: tried to treat a file as a directory")
+                        }
+                        Node::File(f) => return Ok(f.clone()),
+                    };
                 }
+                None => break,
             }
         }
 
-        match file {
-            Some(_) => todo!(),
-            None => self.read_file(path, parent),
-        }
+        self.read_file(path, parent)
     }
 
     fn read_file(&mut self, path: &str, parent: Option<NodeId>) -> io::Result<File> {
@@ -239,8 +233,10 @@ pub trait VirtualFile {
 
 impl VirtualFile for PathBuf {
     fn file_name(&self) -> String {
-        self.as_path()
+        self.with_extension("at")
+            .as_path()
             .file_name()
+            .map(|name| name.to_ascii_lowercase())
             .unwrap()
             .to_string_lossy()
             .to_string()
