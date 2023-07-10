@@ -21,6 +21,15 @@ impl Infer for Pattern {
 
                 Number(_) => MonoType::typ("Int".to_string()),
 
+                Identifier(x) if x.chars().next().unwrap().is_ascii_uppercase() => {
+                    if ctx.lookup_cons(&x).is_some() {
+                        Self::new(self.location, PatternKind::Constructor(x, vec![]))
+                            .infer((ctx, set))
+                    } else {
+                        ctx.new_error(format!("unbound constructor: {}", x))
+                    }
+                }
+
                 Identifier(x) if ctx.lookup_cons(&x).is_some() => {
                     Self::new(self.location, PatternKind::Constructor(x, vec![])).infer((ctx, set))
                 }
