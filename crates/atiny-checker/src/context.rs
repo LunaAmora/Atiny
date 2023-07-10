@@ -9,7 +9,7 @@ use atiny_parser::io::NodeId;
 use atiny_tree::r#abstract::TypeDecl;
 use itertools::Itertools;
 
-use crate::program::Prog;
+use crate::program::Program;
 
 use super::types::*;
 
@@ -37,7 +37,7 @@ pub enum Imports {
 #[derive(Clone)]
 pub struct Ctx {
     pub id: NodeId,
-    pub program: Prog,
+    pub program: Program,
     pub imports: Rc<RefCell<im_rc::HashMap<NodeId, Imports>>>,
     counter: Rc<RefCell<usize>>,
     pub errors: Rc<RefCell<Vec<Error>>>,
@@ -49,7 +49,7 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    pub fn new(id: NodeId, program: Prog) -> Self {
+    pub fn new(id: NodeId, program: Program) -> Self {
         let mut ctx = Self {
             id,
             program,
@@ -223,14 +223,8 @@ impl Ctx {
             .push(Error::new_dyn(msg, self.location));
     }
 
-    pub fn take_errors(&self) -> Option<Vec<Error>> {
-        let is_not_empty = { !self.errors.borrow().is_empty() };
-
-        is_not_empty.then_some({
-            let mut result = vec![];
-            result.append(&mut self.errors.borrow_mut());
-            result
-        })
+    pub fn take_errors(&self) -> Vec<Error> {
+        std::mem::take(&mut self.errors.borrow_mut())
     }
 
     pub fn err_count(&self) -> usize {

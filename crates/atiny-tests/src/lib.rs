@@ -63,11 +63,10 @@ pub fn test_runner(tests: &[&Test]) {
                         testfn: test::TestFn::DynTestFn(Box::new(move || {
                             println!("testing '{}'", file_name);
 
-                            let mut path = file.path();
-                            path.pop();
+                            let path = file.path();
 
-                            let expect_path = path.join(format!("{}.{}", file_name, "expect"));
-                            let result = function(path.join(format!("{}.{}", file_name, "at")));
+                            let expect_path = path.with_extension("expect");
+                            let result = function(path.with_extension("at"));
 
                             if let Ok(expects) = read_to_string(expect_path.clone()) {
                                 if expects.eq(&result) {

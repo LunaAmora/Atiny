@@ -1,5 +1,5 @@
 use crate::context::{Ctx, Imports};
-use crate::program::{Prog, Program};
+use crate::program::Program;
 use crate::{check::Check, infer::Infer, types::*};
 use atiny_tree::{elaborated::FnBody, r#abstract::*, SeqIter};
 use itertools::Itertools;
@@ -12,13 +12,12 @@ impl Ctx {
                 let mut prog = self.program.borrow_mut();
                 let path = quali.into_iter().join(".");
 
-                let Ok(file) = prog.file_system.get_file_relative(&path, self.id) else {
-                    todo!()
-                };
-                file
+                prog.file_system
+                    .get_file_relative(&path, self.id)
+                    .expect("IO Error")
             };
 
-            let ctx = Program::get_ctx(self.program.clone(), file, |ctx, parsed: Vec<_>| {
+            let ctx = self.program.clone().get_ctx(file, |ctx, parsed: Vec<_>| {
                 parsed.infer(ctx);
             });
 
@@ -42,10 +41,15 @@ impl Ctx {
                 }
 
                 let mut imports = self.imports.borrow_mut();
-                imports.insert(ctx.id, Imports::Items(names));
+                let mut imp = imports.get_mut(&ctx.id);
+                if let Some(Imports::Items(ref mut items)) = &mut imp {
+                    items.extend(names);
+                } else {
+                    imports.insert(ctx.id, Imports::Items(names));
+                }
             }
 
-            self.program.borrow_mut().return_ctx(ctx);
+            Program::return_ctx(ctx);
         }
     }
 
@@ -64,15 +68,6 @@ impl Ctx {
             .into_iter()
             .map(|body| body.infer(self))
             .collect()
-    }
-
-    pub fn program(self) -> Prog {
-        let prog = self.program.clone();
-        {
-            let program = &mut prog.borrow_mut();
-            program.return_ctx(self);
-        }
-        prog
     }
 }
 

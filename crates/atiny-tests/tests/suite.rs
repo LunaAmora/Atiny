@@ -9,49 +9,45 @@ use itertools::Itertools;
 #[macro_use]
 extern crate atiny_tests;
 
-mk_test! { "/suite/expr/", |file_name| {
+mk_test!("/suite/expr/", |file_name| {
     let program = Program::new(file_name).expect("IO error");
 
     let mut parsed_result = String::new();
-    let ctx = Program::get_entry_ctx(program, |ctx, parsed: Expr| {
+    let ctx = program.get_entry_ctx(|ctx, parsed: Expr| {
         let (t, _) = parsed.infer(ctx.clone());
         parsed_result = t.to_string();
     });
 
-    let program = ctx.program();
+    let program = Program::return_ctx(ctx);
     let mut prog = program.borrow_mut();
-    prog.take_errors().map_or_else(
-        || parsed_result,
-        |errs| errs.into_iter().join(""),
-    )
-} }
+    prog.take_errors()
+        .map_or_else(|| parsed_result, |errs| errs.into_iter().join(""))
+});
 
-mk_test! { "/suite/parsing/", |file_name| {
+mk_test!("/suite/parsing/", |file_name| {
     use itertools::Itertools;
     let program = Program::new(file_name).expect("IO error");
 
     let mut parsed_result = String::new();
-    let ctx = Program::get_entry_ctx(program, |_, parsed: Vec<_>| {
-        parsed_result = parsed.iter().map(|x| x.to_string()).join("\n");
+    let ctx = program.get_entry_ctx(|_, parsed: Vec<_>| {
+        parsed_result = parsed.iter().map(|top| top.to_string()).join("\n");
     });
 
-    let program = ctx.program();
+    let program = Program::return_ctx(ctx);
     let mut prog = program.borrow_mut();
-    prog.take_errors().map_or_else(
-        || parsed_result,
-        |errs| errs.into_iter().join(""),
-    )
-} }
+    prog.take_errors()
+        .map_or_else(|| parsed_result, |errs| errs.into_iter().join(""))
+});
 
-mk_test! { "/suite/", |file_name| {
+mk_test!("/suite/", |file_name| {
     let program = Program::new(file_name).expect("IO error");
 
-    let ctx = Program::get_entry_ctx(program, |ctx, parsed: Vec<_>| {
+    let ctx = program.get_entry_ctx(|ctx, parsed: Vec<_>| {
         parsed.infer(ctx);
     });
 
-    let program = ctx.program();
+    let program = Program::return_ctx(ctx);
     let mut prog = program.borrow_mut();
     prog.take_errors()
-        .map_or_else(Default::default, |err| err.into_iter().join(""))
-} }
+        .map_or_else(String::new, |err| err.into_iter().join(""))
+});
