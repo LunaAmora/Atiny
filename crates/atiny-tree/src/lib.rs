@@ -22,6 +22,7 @@ pub trait SeqHelper<C>: Sized {
 
 pub struct SeqIter<T, C: SeqHelper<T>> {
     index: usize,
+    lenght: usize,
     inner: Rc<RefCell<Vec<Option<T>>>>,
     iter_type: PhantomData<C>,
 }
@@ -29,7 +30,8 @@ pub struct SeqIter<T, C: SeqHelper<T>> {
 impl<T, C: SeqHelper<T>> SeqIter<T, C> {
     pub fn as_iter<N: SeqHelper<T>>(&self) -> SeqIter<T, N> {
         SeqIter {
-            index: self.inner.borrow().len(),
+            index: 0,
+            lenght: self.inner.borrow().len(),
             inner: self.inner.clone(),
             iter_type: PhantomData::<N>,
         }
@@ -40,7 +42,8 @@ impl<T, C: SeqHelper<T>> SeqIter<T, C> {
     pub fn new(inner: impl IntoIterator<Item = T>) -> Self {
         let vec: Vec<Option<T>> = inner.into_iter().map(|i| Some(i)).collect();
         Self {
-            index: vec.len(),
+            index: 0,
+            lenght: vec.len(),
             inner: Rc::new(RefCell::new(vec)),
             iter_type: PhantomData,
         }
@@ -51,10 +54,8 @@ impl<T, C: SeqHelper<T>> Iterator for SeqIter<T, C> {
     type Item = C;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index == 0 {
+        if self.index >= self.lenght {
             return None;
-        } else {
-            self.index -= 1;
         }
 
         let current = {
@@ -66,10 +67,7 @@ impl<T, C: SeqHelper<T>> Iterator for SeqIter<T, C> {
             }
         };
 
-        if self.index == 0 {
-            current
-        } else {
-            current.or_else(|| self.next())
-        }
+        self.index += 1;
+        current.or_else(|| self.next())
     }
 }
