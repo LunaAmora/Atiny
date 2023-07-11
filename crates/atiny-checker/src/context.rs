@@ -235,6 +235,29 @@ impl Ctx {
     pub fn new_hole(&self) -> Type {
         MonoType::new_hole(self.new_name(), self.level)
     }
+
+    pub fn update_imports(&self, id: NodeId, update: Imports) {
+        let mut imports = self.imports.borrow_mut();
+        use Imports::*;
+
+        match imports.get_mut(&id) {
+            None => _ = imports.insert(id, update),
+
+            Some(current) => match (current, update) {
+                (Star, Star) => {}
+                (Star, Items(_)) => {}
+                (Module, Module) => {}
+
+                (Star, Module) => todo!(),
+                (Module, Star) => todo!(),
+                (Module, Items(_)) => todo!(),
+                (Items(_), Module) => todo!(),
+
+                (Items(_), Star) => _ = imports.insert(id, Star),
+                (Items(ref mut items), Items(names)) => items.extend(names),
+            },
+        }
+    }
 }
 
 pub trait InferError<T> {

@@ -21,33 +21,35 @@ impl Ctx {
                 parsed.infer(ctx);
             });
 
-            if let Some(item) = item {
-                let mut names = vec![item.data.clone()];
+            let imports = match item {
+                Some(item) if item.data.eq("*") => Imports::Star,
 
-                if let Some(sig) = ctx.lookup_type(&item.data) {
-                    match &sig.value {
-                        TypeValue::Sum(sum) => {
-                            for cons in sum {
-                                names.push(cons.name.clone());
+                Some(item) => {
+                    let mut names = vec![item.data.clone()];
+
+                    if let Some(sig) = ctx.lookup_type(&item.data) {
+                        match &sig.value {
+                            TypeValue::Sum(sum) => {
+                                for cons in sum {
+                                    names.push(cons.name.clone());
+                                }
                             }
+                            TypeValue::Product(_) => todo!(),
+                            TypeValue::Opaque => todo!(),
                         }
-                        TypeValue::Product(_) => todo!(),
-                        TypeValue::Opaque => todo!(),
+                    } else {
+                        self.set_position(item.location);
+                        self.error(format!("could not find `{}` import", item));
+                        //todo: search for other things besides types
                     }
-                } else {
-                    self.set_position(item.location);
-                    self.error(format!("could not find `{}` import", item));
-                    //todo: search for other things besides types
+
+                    Imports::Items(names)
                 }
 
-                let mut imports = self.imports.borrow_mut();
-                let mut imp = imports.get_mut(&ctx.id);
-                if let Some(Imports::Items(ref mut items)) = &mut imp {
-                    items.extend(names);
-                } else {
-                    imports.insert(ctx.id, Imports::Items(names));
-                }
-            }
+                None => Imports::Module,
+            };
+
+            self.update_imports(ctx.id, imports);
 
             Program::return_ctx(ctx);
         }

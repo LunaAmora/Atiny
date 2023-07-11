@@ -217,6 +217,7 @@ FnDecl: FnDecl = "fn" <Loc<LowerId>> <Param*> <TypeAnotation?> <BlockExpr> => Fn
 
 UsePath: (Vec<Located<String>>, Option<Located<String>>) = {
     <a:(<Loc<UpperId>> "::")+> <b:Loc<Id>> => (a, Some(b)),
+    <a:(<Loc<UpperId>> "::")+> <b:Loc<"*">> => (a, Some(b.map(|star| star.to_string()))),
     <Loc<UpperId>> => (vec![<>], None)
 };
 
