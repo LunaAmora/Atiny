@@ -19,12 +19,10 @@ lalrpop_mod!(
     parser
 );
 
-pub trait ParserOutput {}
-
-impl ParserOutput for Vec<TopLevel> {}
-impl ParserOutput for Expr {}
-
-pub trait Parser<T: ParserOutput> {
+pub trait Parser<T>
+where
+    Parsers: Parser<T>,
+{
     fn parse(&self, input: &str) -> Result<T, Error>;
 }
 

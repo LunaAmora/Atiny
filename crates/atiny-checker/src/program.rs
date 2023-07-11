@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::{cell::RefCell, collections::HashMap, fs::read_to_string, path::PathBuf, rc::Rc};
 
 use atiny_parser::io::{File, FileSystem, NodeId, VirtualFileSystem};
-use atiny_parser::{Parser, ParserOutput, Parsers};
+use atiny_parser::{Parser, Parsers};
 use atiny_tree::elaborated::FnBody;
 
 use crate::context::Ctx;
@@ -50,7 +50,6 @@ impl Program {
     pub fn get_entry<Out>(&self, f: impl FnMut(&mut Ctx, Option<Out>))
     where
         Parsers: Parser<Out>,
-        Out: ParserOutput,
     {
         let entry_point = self.borrow().get_entry();
         self.get_module(entry_point, f);
@@ -59,7 +58,6 @@ impl Program {
     pub fn get_module<Out>(&self, file: File, mut f: impl FnMut(&mut Ctx, Option<Out>))
     where
         Parsers: Parser<Out>,
-        Out: ParserOutput,
     {
         let (mut ctx, parsed) = self.take_or_parse(file);
         f(&mut ctx, parsed);
@@ -69,7 +67,6 @@ impl Program {
     fn take_or_parse<Out>(&self, file: File) -> (Ctx, Option<Out>)
     where
         Parsers: Parser<Out>,
-        Out: ParserOutput,
     {
         if let Some(ctx) = { self.borrow_mut().take_ctx(file.id) } {
             return (ctx, None);
@@ -81,7 +78,6 @@ impl Program {
     fn parse_file_as_ctx<Out>(&self, file: File) -> (Ctx, Option<Out>)
     where
         Parsers: Parser<Out>,
-        Out: ParserOutput,
     {
         let parsed = { self.borrow_mut().parse_file(&file) };
         let ctx = Ctx::new(file.id, self.clone());
@@ -122,7 +118,6 @@ impl Prog {
     fn parse_file<Out>(&mut self, file: &File) -> Result<Out, atiny_error::Error>
     where
         Parsers: Parser<Out>,
-        Out: ParserOutput,
     {
         let None = self.modules.insert(file.id, None) else {
             panic!("ICE: attempted to parse the same file twice")
