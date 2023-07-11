@@ -1,2 +1,12 @@
 type List t = | Cons t (List t) | Nil
-type Bool = | True | False
+type Bool   = | True | False
+type String = | Str
+
+type User = {
+    name: String,
+    age: Int
+}
+
+fn main {
+
+}

@@ -4,7 +4,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use atiny_error::{Error, Message, SugestionKind};
-use atiny_location::ByteRange;
+use atiny_location::{ByteRange, Located};
 use atiny_parser::io::NodeId;
 use atiny_tree::r#abstract::TypeDecl;
 use itertools::Itertools;
@@ -27,7 +27,7 @@ impl Display for Signatures {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Imports {
     Star,
     Module,
@@ -234,6 +234,50 @@ impl Ctx {
     /// Creates a new hole type.
     pub fn new_hole(&self) -> Type {
         MonoType::new_hole(self.new_name(), self.level)
+    }
+
+    pub fn register_imports(&mut self, ctx: &Self, item: Option<Located<String>>) {
+        let imports = match item {
+            None => Imports::Module,
+
+            Some(item) if item.data.eq("*") => Imports::Star,
+
+            Some(item) if item.data.starts_with(|c: char| c.is_ascii_uppercase()) => {
+                let mut names = Vec::new();
+
+                match ctx.lookup_type(&item.data) {
+                    Some(sig) => match &sig.value {
+                        TypeValue::Sum(sum) => {
+                            names.push(item.data.clone());
+                            for cons in sum {
+                                names.push(cons.name.clone());
+                            }
+                        }
+                        TypeValue::Product(_) => names.push(sig.name),
+
+                        TypeValue::Opaque => todo!(),
+                    },
+                    None => {
+                        self.set_position(item.location);
+                        self.error(format!("could not find Type `{}` import", item));
+                        return;
+                    }
+                }
+
+                Imports::Items(names)
+            }
+
+            Some(item) => match ctx.lookup(&item.data) {
+                Some(_) => Imports::Items(vec![item.data.clone()]),
+                None => {
+                    self.set_position(item.location);
+                    self.error(format!("could not find `{}` import", item));
+                    return;
+                }
+            },
+        };
+
+        self.update_imports(ctx.id, imports);
     }
 
     pub fn update_imports(&self, id: NodeId, update: Imports) {

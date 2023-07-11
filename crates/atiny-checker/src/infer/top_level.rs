@@ -1,4 +1,4 @@
-use crate::context::{Ctx, Imports};
+use crate::context::Ctx;
 use crate::program::Program;
 use crate::{check::Check, infer::Infer, types::*};
 use atiny_tree::{elaborated::FnBody, r#abstract::*, SeqIter};
@@ -21,36 +21,7 @@ impl Ctx {
                 parsed.infer(ctx);
             });
 
-            let imports = match item {
-                Some(item) if item.data.eq("*") => Imports::Star,
-
-                Some(item) => {
-                    let mut names = vec![item.data.clone()];
-
-                    if let Some(sig) = ctx.lookup_type(&item.data) {
-                        match &sig.value {
-                            TypeValue::Sum(sum) => {
-                                for cons in sum {
-                                    names.push(cons.name.clone());
-                                }
-                            }
-                            TypeValue::Product(_) => todo!(),
-                            TypeValue::Opaque => todo!(),
-                        }
-                    } else {
-                        self.set_position(item.location);
-                        self.error(format!("could not find `{}` import", item));
-                        //todo: search for other things besides types
-                    }
-
-                    Imports::Items(names)
-                }
-
-                None => Imports::Module,
-            };
-
-            self.update_imports(ctx.id, imports);
-
+            self.register_imports(&ctx, item);
             Program::return_ctx(ctx);
         }
     }
