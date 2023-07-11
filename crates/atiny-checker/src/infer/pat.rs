@@ -21,7 +21,7 @@ impl Infer for Pattern {
 
                 Number(_) => MonoType::typ("Int".to_string()),
 
-                Identifier(x) if x.chars().next().unwrap().is_ascii_uppercase() => {
+                Identifier(x) if x.starts_with(|c: char| c.is_ascii_uppercase()) => {
                     if ctx.lookup_cons(&x).is_some() {
                         Self::new(self.location, PatternKind::Constructor(x, vec![]))
                             .infer((ctx, set))
