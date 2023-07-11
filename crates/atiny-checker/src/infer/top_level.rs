@@ -1,5 +1,4 @@
 use crate::context::Ctx;
-use crate::program::Program;
 use crate::{check::Check, infer::Infer, types::*};
 use atiny_tree::{elaborated::FnBody, r#abstract::*, SeqIter};
 use itertools::Itertools;
@@ -17,12 +16,12 @@ impl Ctx {
                     .expect("IO Error")
             };
 
-            let ctx = self.program.clone().get_ctx(file, |ctx, parsed: Vec<_>| {
-                parsed.infer(ctx);
-            });
-
-            self.register_imports(&ctx, item);
-            Program::return_ctx(ctx);
+            self.program
+                .clone()
+                .get_module(file, |ctx, parsed: Option<Vec<_>>| {
+                    parsed.infer(ctx);
+                    self.register_imports(ctx, item.clone());
+                });
         }
     }
 

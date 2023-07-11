@@ -22,3 +22,12 @@ pub trait Infer {
     /// Infers the type of an expression.
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return;
 }
+
+impl<T: Infer> Infer for Option<T> {
+    type Context<'a> = T::Context<'a>;
+    type Return = Option<T::Return>;
+
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
+        self.map(|s| s.infer(ctx))
+    }
+}

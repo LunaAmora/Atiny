@@ -22,12 +22,11 @@ fn main() {
     Program::new(file).map_or_else(
         |err| println!("IO error: {}", err),
         |program| {
-            let ctx = program.get_entry_ctx(|ctx, parsed: Vec<_>| {
+            program.get_entry(|ctx, parsed: Option<Vec<_>>| {
                 parsed.infer(ctx);
             });
 
-            let program = Program::return_ctx(ctx);
-            program.borrow_mut().print_errors();
+            program.print_errors();
         },
     );
 }

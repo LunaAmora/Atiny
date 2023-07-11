@@ -34,47 +34,57 @@ impl Program {
             .map(|prog| Self(Rc::new(RefCell::new(prog))))
     }
 
-    pub fn return_ctx(ctx: Ctx) -> Self {
-        let program = ctx.program.clone();
-        {
-            let prog = &mut program.borrow_mut();
-            prog.modules.insert(ctx.id, Some(ctx));
-        }
-        program
+    pub fn print_errors(&self) {
+        self.borrow_mut().print_errors();
     }
 
-    pub fn get_entry_ctx<Out>(self, f: impl FnMut(&mut Ctx, Out)) -> Ctx
+    pub fn take_errors(&self) -> Option<Vec<String>> {
+        self.borrow_mut().take_errors()
+    }
+
+    pub fn return_ctx(&self, ctx: Ctx) {
+        let prog = &mut self.borrow_mut();
+        prog.modules.insert(ctx.id, Some(ctx));
+    }
+
+    pub fn get_entry<Out>(&self, f: impl FnMut(&mut Ctx, Option<Out>))
     where
         Parsers: Parser<Out>,
         Out: ParserOutput,
     {
         let entry_point = self.borrow().get_entry();
-        self.get_ctx(entry_point, f)
+        self.get_module(entry_point, f);
     }
 
-    pub fn get_ctx<Out>(self, file: File, mut f: impl FnMut(&mut Ctx, Out)) -> Ctx
+    pub fn get_module<Out>(&self, file: File, mut f: impl FnMut(&mut Ctx, Option<Out>))
+    where
+        Parsers: Parser<Out>,
+        Out: ParserOutput,
+    {
+        let (mut ctx, parsed) = self.take_or_parse(file);
+        f(&mut ctx, parsed);
+        self.return_ctx(ctx);
+    }
+
+    fn take_or_parse<Out>(&self, file: File) -> (Ctx, Option<Out>)
     where
         Parsers: Parser<Out>,
         Out: ParserOutput,
     {
         if let Some(ctx) = { self.borrow_mut().take_ctx(file.id) } {
-            return ctx;
+            return (ctx, None);
         }
 
-        let (mut ctx, parsed) = self.parse_file_as_ctx(file);
-        if let Some(parsed) = parsed {
-            f(&mut ctx, parsed);
-        }
-        ctx
+        self.parse_file_as_ctx(file)
     }
 
-    fn parse_file_as_ctx<Out>(self, file: File) -> (Ctx, Option<Out>)
+    fn parse_file_as_ctx<Out>(&self, file: File) -> (Ctx, Option<Out>)
     where
         Parsers: Parser<Out>,
         Out: ParserOutput,
     {
         let parsed = { self.borrow_mut().parse_file(&file) };
-        let ctx = Ctx::new(file.id, self);
+        let ctx = Ctx::new(file.id, self.clone());
 
         let top = parsed.map_or_else(
             |err| {
