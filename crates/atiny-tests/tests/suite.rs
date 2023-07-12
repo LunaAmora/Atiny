@@ -46,9 +46,9 @@ mk_test!("/suite/parsing/", |file_name| {
 mk_test!("/suite/", |file_name| {
     let program = Program::new(file_name).expect("IO error");
 
-    program.get_entry(|ctx, parsed: Option<Vec<_>>| {
-        parsed.infer(ctx);
-    });
+    let _ = program
+        .get_entry(|ctx, parsed: Option<Vec<_>>| parsed.infer(ctx))
+        .infer(program.clone());
 
     program
         .take_errors()

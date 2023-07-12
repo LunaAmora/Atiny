@@ -1,12 +1,19 @@
+use Main::Something
+use Main::main
+
 type List t = | Cons t (List t) | Nil
 type Bool   = | True | False
-type String = | Str
 
-type User = {
-    name: String,
-    age: Int
+type OtherThing = {
+    other: Something
 }
 
-fn main {
+fn lib_main : (OtherThing, Something, (List Bool)) {
+    let arg = OtherThing {
+        other = Something {
+            value = Cons False Nil
+        }
+    };
 
+    main arg
 }

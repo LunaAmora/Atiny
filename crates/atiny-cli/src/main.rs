@@ -22,9 +22,9 @@ fn main() {
     Program::new(file).map_or_else(
         |err| println!("IO error: {}", err),
         |program| {
-            program.get_entry(|ctx, parsed: Option<Vec<_>>| {
-                parsed.infer(ctx);
-            });
+            let _ = program
+                .get_entry(|ctx, parsed: Option<Vec<_>>| parsed.infer(ctx))
+                .infer(program.clone());
 
             program.print_errors();
         },

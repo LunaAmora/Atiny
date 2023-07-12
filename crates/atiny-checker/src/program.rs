@@ -3,6 +3,7 @@ use std::mem::take;
 use std::ops::Deref;
 use std::{cell::RefCell, collections::HashMap, fs::read_to_string, path::PathBuf, rc::Rc};
 
+use atiny_error::Error;
 use atiny_parser::io::{File, FileSystem, NodeId, VirtualFileSystem};
 use atiny_parser::{Parser, Parsers};
 use atiny_tree::elaborated::FnBody;
@@ -47,21 +48,22 @@ impl Program {
         prog.modules.insert(ctx.id, Some(ctx));
     }
 
-    pub fn get_entry<Out>(&self, f: impl FnMut(&mut Ctx, Option<Out>))
+    pub fn get_entry<Out, R>(&self, f: impl FnMut(&mut Ctx, Option<Out>) -> R) -> R
     where
         Parsers: Parser<Out>,
     {
         let entry_point = self.borrow().get_entry();
-        self.get_module(entry_point, f);
+        self.get_module(entry_point, f)
     }
 
-    pub fn get_module<Out>(&self, file: File, mut f: impl FnMut(&mut Ctx, Option<Out>))
+    pub fn get_module<Out, R>(&self, file: File, mut f: impl FnMut(&mut Ctx, Option<Out>) -> R) -> R
     where
         Parsers: Parser<Out>,
     {
         let (mut ctx, parsed) = self.take_or_parse(file);
-        f(&mut ctx, parsed);
+        let result = f(&mut ctx, parsed);
         self.return_ctx(ctx);
+        result
     }
 
     fn take_or_parse<Out>(&self, file: File) -> (Ctx, Option<Out>)
@@ -107,7 +109,7 @@ impl Prog {
         self.file_system.get_file(self.entry_point).unwrap()
     }
 
-    fn take_ctx(&mut self, id: NodeId) -> Option<Ctx> {
+    pub fn take_ctx(&mut self, id: NodeId) -> Option<Ctx> {
         match self.modules.get_mut(&id) {
             Some(None) => panic!("ICE: context was already taken"),
             Some(ctx) => take(ctx),
@@ -115,7 +117,7 @@ impl Prog {
         }
     }
 
-    fn parse_file<Out>(&mut self, file: &File) -> Result<Out, atiny_error::Error>
+    fn parse_file<Out>(&mut self, file: &File) -> Result<Out, Error>
     where
         Parsers: Parser<Out>,
     {

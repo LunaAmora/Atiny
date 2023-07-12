@@ -9,7 +9,7 @@ use atiny_parser::io::NodeId;
 use atiny_tree::r#abstract::TypeDecl;
 use itertools::Itertools;
 
-use crate::program::Program;
+use crate::{infer::Infer, program::Program};
 
 use super::types::*;
 
@@ -78,7 +78,11 @@ impl Ctx {
             ("div".to_string(), sig),
         ]);
 
-        ctx.extend_type_sigs(Some(TypeDecl::unit()));
+        #[allow(clippy::let_unit_value)]
+        {
+            let cons = TypeDecl::unit().infer(&mut ctx);
+            let _ = cons.infer(&mut ctx);
+        }
 
         ctx
     }
@@ -246,17 +250,13 @@ impl Ctx {
                 let mut names = Vec::new();
 
                 match ctx.lookup_type(&item.data) {
-                    Some(sig) => match &sig.value {
-                        TypeValue::Sum(sum) => {
-                            names.push(item.data.clone());
-                            for cons in sum {
-                                names.push(cons.name.clone());
-                            }
+                    Some(sig) => {
+                        names.push(sig.name);
+                        for name in sig.names {
+                            names.push(name);
                         }
-                        TypeValue::Product(_) => names.push(sig.name),
+                    }
 
-                        TypeValue::Opaque => todo!(),
-                    },
                     None => {
                         self.set_position(item.location);
                         self.error(format!("could not find Type `{}` import", item));
@@ -267,14 +267,7 @@ impl Ctx {
                 Imports::Items(names)
             }
 
-            Some(item) => match ctx.lookup(&item.data) {
-                Some(_) => Imports::Items(vec![item.data.clone()]),
-                None => {
-                    self.set_position(item.location);
-                    self.error(format!("could not find `{}` import", item));
-                    return;
-                }
-            },
+            Some(item) => Imports::Items(vec![item.data]),
         };
 
         self.update_imports(ctx.id, imports);

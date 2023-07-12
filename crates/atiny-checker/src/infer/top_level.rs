@@ -2,10 +2,31 @@ use crate::context::Ctx;
 use crate::{check::Check, infer::Infer, types::*};
 use atiny_tree::{elaborated::FnBody, r#abstract::*, SeqIter};
 use itertools::Itertools;
+use std::iter::FromIterator;
 use std::{collections::HashSet, iter, rc::Rc};
 
+use super::module::ModuleMap;
+
+impl Infer for Vec<TopLevel> {
+    type Context<'a> = &'a mut Ctx;
+    type Return = ModuleMap;
+
+    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
+        let mut top_levels = SeqIter::new(self);
+
+        let cons = ctx.infer_all(top_levels.as_iter::<TypeDecl>());
+        let mut module_map = ctx.resolve_imports(&mut top_levels);
+        let bodies = ctx.infer_all(top_levels.as_iter::<FnDecl>());
+
+        module_map.push((ctx.id, (cons, bodies)));
+        module_map
+    }
+}
+
 impl Ctx {
-    pub fn resolve_imports(&mut self, iter: impl IntoIterator<Item = UseDecl>) {
+    pub fn resolve_imports(&mut self, iter: impl IntoIterator<Item = UseDecl>) -> ModuleMap {
+        let mut infered = ModuleMap::default();
+
         for UseDecl(Qualifier(quali), item) in iter.into_iter() {
             let file = {
                 let mut prog = self.program.borrow_mut();
@@ -16,46 +37,28 @@ impl Ctx {
                     .expect("IO Error")
             };
 
+            self.program.return_ctx(self.clone());
+
             self.program
                 .clone()
                 .get_module(file, |ctx, parsed: Option<Vec<_>>| {
-                    parsed.infer(ctx);
+                    if let Some(ModuleMap(module)) = parsed.infer(ctx) {
+                        infered.extend(module);
+                    }
+
                     self.register_imports(ctx, item.clone());
                 });
         }
+
+        infered
     }
 
-    pub fn extend_type_sigs(&mut self, iter: impl IntoIterator<Item = TypeDecl>) {
-        iter.into_iter()
-            .map(|type_decl| type_decl.infer(self))
-            .collect_vec()
-            .into_iter()
-            .for_each(|constr| constr.infer(self));
-    }
-
-    pub fn extend_fun_sigs(&mut self, iter: impl IntoIterator<Item = FnDecl>) -> Vec<FnBody<Type>> {
-        iter.into_iter()
-            .map(|fun_decl| fun_decl.infer(self))
-            .collect_vec()
-            .into_iter()
-            .map(|body| body.infer(self))
-            .collect()
-    }
-}
-
-impl Infer for Vec<TopLevel> {
-    type Context<'a> = &'a mut Ctx;
-    type Return = ();
-
-    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let mut top_levels = SeqIter::new(self);
-
-        ctx.resolve_imports(&mut top_levels);
-        ctx.extend_type_sigs(top_levels.as_iter());
-        let bodies = ctx.extend_fun_sigs(top_levels.as_iter());
-
-        let mut prog = ctx.program.borrow_mut();
-        prog.elaborated.insert(ctx.id, bodies);
+    pub fn infer_all<T, O>(&mut self, iter: impl IntoIterator<Item = T>) -> O
+    where
+        T: for<'a> Infer<Context<'a> = &'a mut Self>,
+        O: FromIterator<T::Return>,
+    {
+        iter.into_iter().map(|item| item.infer(self)).collect()
     }
 }
 
@@ -64,15 +67,19 @@ impl Infer for TypeDecl {
     type Return = (String, TypeDeclKind);
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let value = match self.constructors {
-            TypeDeclKind::Sum(_) => TypeValue::Sum(Vec::new()),
-            TypeDeclKind::Product(_) => TypeValue::Product(Vec::new()),
+        let (value, names) = match self.constructors {
+            TypeDeclKind::Sum(ref cons) => (
+                TypeValue::Sum(Vec::new()),
+                cons.iter().map(|c| c.name.clone()).collect(),
+            ),
+            TypeDeclKind::Product(_) => (TypeValue::Product(Vec::new()), Vec::new()),
         };
 
         let type_sig = TypeSignature {
             name: self.name.clone(),
             params: self.params.clone(),
             value,
+            names,
         };
 
         ctx.signatures.types.insert(self.name.clone(), type_sig);
@@ -207,7 +214,7 @@ impl Infer for FnDecl {
 }
 
 impl Infer for (String, Expr) {
-    type Context<'a> = &'a Ctx;
+    type Context<'a> = &'a mut Ctx;
     type Return = FnBody<Type>;
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
