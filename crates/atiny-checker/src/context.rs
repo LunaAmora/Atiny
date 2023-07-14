@@ -68,8 +68,8 @@ impl Ctx {
             TypeSignature::new_opaque("Int".to_string()),
         );
 
-        let int = MonoType::typ("Int".to_string());
-        let sig = MonoType::arrow(int.clone(), MonoType::arrow(int.clone(), int)).to_poly();
+        let int = Type::typ("Int".to_string(), id);
+        let sig = int.clone().arrow(int.clone().arrow(int, id), id).to_poly();
 
         ctx.map.extend([
             ("add".to_string(), sig.clone()),
@@ -187,7 +187,7 @@ impl Ctx {
         None
     }
 
-    fn get_ctx_by_id(&self, id: &NodeId) -> Self {
+    pub fn get_ctx_by_id(&self, id: &NodeId) -> Self {
         self.program.borrow().modules[id]
             .clone()
             .expect("ICE: context was not stored in the program")
@@ -237,7 +237,7 @@ impl Ctx {
 
     /// Creates a new hole type.
     pub fn new_hole(&self) -> Type {
-        MonoType::new_hole(self.new_name(), self.level)
+        Type::new_hole(self.new_name(), self.level, self.id)
     }
 
     pub fn register_imports(&mut self, ctx: &Self, item: Option<Located<String>>) {
@@ -304,6 +304,6 @@ pub trait InferError<T> {
 impl InferError<Type> for Ctx {
     fn new_error(&self, msg: String) -> Type {
         self.error(msg);
-        Rc::new(MonoType::Error)
+        Type::new(MonoType::Error, self.id)
     }
 }

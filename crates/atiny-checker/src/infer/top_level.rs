@@ -1,5 +1,6 @@
 use crate::context::Ctx;
 use crate::{check::Check, infer::Infer, types::*};
+use atiny_parser::io::File;
 use atiny_tree::{elaborated::FnBody, r#abstract::*, SeqIter};
 use itertools::Itertools;
 use std::iter::FromIterator;
@@ -27,16 +28,8 @@ impl Ctx {
     pub fn resolve_imports(&mut self, iter: impl IntoIterator<Item = UseDecl>) -> ModuleMap {
         let mut infered = ModuleMap::default();
 
-        for UseDecl(Qualifier(quali), item) in iter.into_iter() {
-            let file = {
-                let mut prog = self.program.borrow_mut();
-                let path = quali.into_iter().join(".");
-
-                prog.file_system
-                    .get_file_relative(&path, self.id)
-                    .expect("IO Error")
-            };
-
+        for UseDecl(quali, item) in iter.into_iter() {
+            let file = self.get_file_from_qualifier(quali);
             self.program.return_ctx(self.clone());
 
             self.program
@@ -51,6 +44,15 @@ impl Ctx {
         }
 
         infered
+    }
+
+    pub fn get_file_from_qualifier(&mut self, quali: Qualifier) -> File {
+        let mut prog = self.program.borrow_mut();
+        let path = quali.0.into_iter().join(".");
+
+        prog.file_system
+            .get_file_relative(&path, self.id)
+            .expect("IO Error")
     }
 
     pub fn infer_all<T, O>(&mut self, iter: impl IntoIterator<Item = T>) -> O
@@ -77,7 +79,7 @@ impl Infer for TypeDecl {
 
         let type_sig = TypeSignature {
             name: self.name.clone(),
-            params: self.params.clone(),
+            params: self.params,
             value,
             names,
         };
@@ -138,15 +140,19 @@ impl Infer for (&str, Constructor) {
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (decl_name, constr) = self;
+        let id = ctx.id;
 
         let Some(TypeSignature { params, .. }) = &ctx.lookup_type(decl_name) else {
             panic!("The String should be a valid type signature name on the Ctx");
         };
 
-        let application = Rc::new(MonoType::Application(
-            decl_name.to_string(),
-            params.iter().cloned().map(MonoType::var).collect(),
-        ));
+        let application = Type::new(
+            MonoType::Application(
+                decl_name.to_string(),
+                params.iter().cloned().map(|t| Type::var(t, id)).collect(),
+            ),
+            id,
+        );
 
         let new_ctx = ctx.extend_types(params);
 
@@ -159,7 +165,7 @@ impl Infer for (&str, Constructor) {
         let value = Rc::new(ConstructorSignature::new(
             constr.name.clone(),
             params.clone(),
-            MonoType::rfold_arrow(args.iter().cloned(), application),
+            Type::rfold_arrow(args.iter().cloned(), application, id),
             args,
         ));
 
@@ -198,7 +204,7 @@ impl Infer for FnDecl {
 
         let entire_type = TypeScheme::new(
             set.into_iter().collect(),
-            MonoType::rfold_arrow(args.iter().map(|(_, ty)| ty.clone()), ret),
+            Type::rfold_arrow(args.iter().map(|(_, ty)| ty.clone()), ret, ctx.id),
         );
 
         let sig = DeclSignature::Function(FunctionSignature {
@@ -270,6 +276,7 @@ impl Ctx {
                     self.free_variables(arg, set);
                 }
             }
+            TypeKind::Path(_) => {} //Todo: check if this is this correct
         }
     }
 }

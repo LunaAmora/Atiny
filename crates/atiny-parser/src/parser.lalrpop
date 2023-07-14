@@ -49,7 +49,7 @@ AtomItem<I, O> : O = {
     "_" => AtomKind::Wildcard.into(),
     Num => AtomKind::Number(<>).into(),
     Id  => AtomKind::Identifier(<>).into(),
-    Path => AtomKind::Path(Qualifier(<>.0), <>.1).into(),
+    Path => AtomKind::PathItem(Path(Qualifier(<>.0), <>.1)).into(),
     "(" <mut sep:Sep<",", I>> ")" => {
         let (mut vec, trailing) = sep;
 
@@ -91,7 +91,7 @@ Statement: StatementKind = {
 }
 
 Block: Vec<Statement> = {
-    Loc<r"[{][\s]*[}]"> => vec![<>.clone().map(|_| StatementKind::Expr(<>.map(|_| ExprKind::Atom(AtomKind::unit()))))],
+    Loc<r"[{][\s]*[}]"> => vec![StatementKind::Expr(ExprKind::Atom(AtomKind::unit()).with_loc(&<>)).with_loc(&<>)],
     BlockList<";", Loc<Statement>>
 };
 
@@ -105,7 +105,7 @@ InnerExpr: Expr = {
 }
 
 RecordItem: ExprKind = {
-    <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f)
+    <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f.into())
 }
 
 OuterItem: ExprKind = Item<Loc<RecordItem>>;
@@ -154,6 +154,7 @@ ExprField: ExprField = <name: LowerId> "=" <expr: Expr> => ExprField {<>};
 
 TypeAtomItem: TypeKind = {
     <name: Id> => TypeKind::Variable(VariableNode {<>}),
+    <a:(<Loc<UpperId>> "::")+> <b:Loc<UpperId>> => TypeKind::Path(Path(Qualifier(a), b)),
     "(" <mut sep:Sep<",", TypeNode>> ")" => {
         let (mut types, trailing) = sep;
 

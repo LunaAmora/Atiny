@@ -9,6 +9,7 @@ use atiny_parser::{Parser, Parsers};
 use atiny_tree::elaborated::FnBody;
 
 use crate::context::Ctx;
+use crate::infer::Infer;
 use crate::types::Type;
 
 #[derive(Clone)]
@@ -62,6 +63,18 @@ impl Program {
     {
         let (mut ctx, parsed) = self.take_or_parse(file);
         let result = f(&mut ctx, parsed);
+        self.return_ctx(ctx);
+        result
+    }
+
+    pub fn get_infered_module<Out, R>(&self, file: File, mut f: impl FnMut(&mut Ctx) -> R) -> R
+    where
+        Parsers: Parser<Out>,
+        Out: for<'a> Infer<Context<'a> = &'a mut Ctx>,
+    {
+        let (mut ctx, parsed) = self.take_or_parse(file);
+        let _ = parsed.infer(&mut ctx);
+        let result = f(&mut ctx);
         self.return_ctx(ctx);
         result
     }

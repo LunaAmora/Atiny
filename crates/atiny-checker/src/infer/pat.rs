@@ -5,7 +5,7 @@ use crate::types::{MonoType, Type};
 use crate::unify::unify;
 
 use atiny_tree::r#abstract::{wildcard, AtomKind, Pattern, PatternKind};
-use std::{collections::HashSet, rc::Rc};
+use std::collections::HashSet;
 
 impl Infer for Pattern {
     type Context<'a> = (&'a mut Ctx, &'a mut HashSet<String>);
@@ -14,12 +14,13 @@ impl Infer for Pattern {
     fn infer(self, (ctx, set): Self::Context<'_>) -> Self::Return {
         use AtomKind::*;
         ctx.set_position(self.location);
+        let id = ctx.id;
 
         match self.data {
             PatternKind::Atom(a) => match a {
                 Wildcard => ctx.new_hole(),
 
-                Number(_) => MonoType::typ("Int".to_string()),
+                Number(_) => Type::typ("Int".to_string(), id),
 
                 Identifier(x) if x.starts_with(|c: char| c.is_ascii_uppercase()) => {
                     if ctx.lookup_cons(&x).is_some() {
@@ -42,11 +43,12 @@ impl Infer for Pattern {
 
                 Identifier(x) => ctx.new_error(format!("identifier '{}' bound more than once", x)),
 
-                Tuple(vec) => Rc::new(MonoType::Tuple(
-                    vec.into_iter().map(|pat| pat.infer((ctx, set))).collect(),
-                )),
+                Tuple(vec) => Type::new(
+                    MonoType::Tuple(vec.into_iter().map(|pat| pat.infer((ctx, set))).collect()),
+                    id,
+                ),
 
-                Path(_, _) => todo!(),
+                PathItem(_) => todo!(),
             },
 
             PatternKind::Constructor(name, args) => {

@@ -125,3 +125,14 @@ impl<T> Located<T> {
         }
     }
 }
+
+pub trait WithLoc: Sized {
+    fn with_loc<Any>(self, located: &Located<Any>) -> Located<Self> {
+        Located {
+            location: located.location,
+            data: self,
+        }
+    }
+}
+
+impl<T: Sized> WithLoc for T {}

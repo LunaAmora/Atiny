@@ -6,16 +6,16 @@ use std::{
     collections::{BTreeMap, HashSet},
     fmt::{self, Display},
     hash::{Hash, Hasher},
+    ops::Deref,
     ptr::addr_of,
     rc::Rc,
 };
 
+use atiny_parser::io::NodeId;
 use atiny_tree::r#abstract::Pattern;
 use itertools::Itertools;
 
 use super::context::Ctx;
-
-pub type Type = Rc<MonoType>;
 
 /// A type scheme is a prenex polymorphic construction that is used to express value dependency on
 /// types. E.g.
@@ -38,7 +38,7 @@ impl TypeScheme {
         let mut types = Vec::new();
 
         for _ in &self.names {
-            types.push(MonoType::new_hole(ctx.new_name(), ctx.level));
+            types.push(ctx.new_hole());
         }
 
         (self.instantiate_with(&types), types)
@@ -203,21 +203,50 @@ impl Display for MonoType {
     }
 }
 
-impl MonoType {
-    pub fn get_constructor(self: &Type) -> Option<String> {
+#[derive(Debug, Clone)]
+pub struct Type(pub Rc<MonoType>, pub NodeId);
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Deref for Type {
+    type Target = MonoType;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Type {
+    pub fn new(typ: MonoType, id: NodeId) -> Self {
+        Self(Rc::new(typ), id)
+    }
+}
+
+impl Type {
+    pub fn get_constructor(&self) -> Option<String> {
         match &**self {
-            Self::Application(s, _) => Some(s.clone()),
+            MonoType::Application(s, _) => Some(s.clone()),
             _ => None,
         }
     }
 
-    pub fn iter(self: Type) -> TypeIter {
+    pub fn iter(self) -> TypeIter {
         TypeIter { typ: self }
     }
 
-    pub fn flatten(self: Type) -> Type {
+    pub fn flatten(self) -> Self {
         match &*self {
-            Self::Hole(hole) => match hole.get() {
+            MonoType::Hole(hole) => match hole.get() {
                 Hole::Filled(f) => f.flatten(),
                 Hole::Empty(_) => self,
             },
@@ -225,107 +254,127 @@ impl MonoType {
         }
     }
 
-    pub fn flatten_back(self: Type) -> Type {
+    pub fn flatten_back(self) -> Self {
         match &*self.clone().flatten() {
-            Self::Arrow(_, end) => end.clone().flatten_back(),
+            MonoType::Arrow(_, end) => end.clone().flatten_back(),
             _ => self,
         }
     }
 
-    pub fn rfold_arrow<I: DoubleEndedIterator<Item = Type>>(iter: I, end: Type) -> Type {
-        iter.rfold(end, |x, y| y.arrow(x))
+    pub fn rfold_arrow<I: DoubleEndedIterator<Item = Self>>(
+        iter: I,
+        end: Self,
+        id: NodeId,
+    ) -> Self {
+        iter.rfold(end, |x, y| y.arrow(x, id))
     }
 
-    pub fn substitute(self: &Type, substs: &BTreeMap<String, Type>) -> Type {
+    pub fn substitute(&self, substs: &BTreeMap<String, Self>) -> Self {
+        let id = self.1;
         match &**self {
-            Self::Var(name) => substs.get(name).cloned().unwrap_or_else(|| self.clone()),
+            MonoType::Var(name) => substs.get(name).cloned().unwrap_or_else(|| self.clone()),
 
-            Self::Tuple(vec) => Rc::new(Self::Tuple(
-                vec.iter().map(|mono| mono.substitute(substs)).collect(),
-            )),
+            MonoType::Tuple(vec) => Self::new(
+                MonoType::Tuple(vec.iter().map(|mono| mono.substitute(substs)).collect()),
+                id,
+            ),
 
-            Self::Arrow(from, to) => {
-                Rc::new(Self::Arrow(from.substitute(substs), to.substitute(substs)))
-            }
+            MonoType::Arrow(from, to) => Self::new(
+                MonoType::Arrow(from.substitute(substs), to.substitute(substs)),
+                id,
+            ),
 
-            Self::Hole(item) => match item.get() {
+            MonoType::Hole(item) => match item.get() {
                 Hole::Filled(typ) => typ.substitute(substs),
                 Hole::Empty(_) => self.clone(),
             },
 
-            Self::Application(string, args) => Rc::new(Self::Application(
-                string.clone(),
-                args.iter().map(|a| a.substitute(substs)).collect(),
-            )),
+            MonoType::Application(string, args) => Self::new(
+                MonoType::Application(
+                    string.clone(),
+                    args.iter().map(|a| a.substitute(substs)).collect(),
+                ),
+                id,
+            ),
 
-            Self::Error => self.clone(),
+            MonoType::Error => self.clone(),
         }
     }
 
-    pub fn to_poly(self: &Type) -> Rc<TypeScheme> {
+    pub fn to_poly(&self) -> Rc<TypeScheme> {
         Rc::new(TypeScheme {
             names: vec![],
             mono: self.clone(),
         })
     }
 
-    pub fn tuple(vec: Vec<Type>) -> Type {
-        Rc::new(Self::Tuple(vec))
+    pub fn tuple(vec: Vec<Self>, id: NodeId) -> Self {
+        Self::new(MonoType::Tuple(vec), id)
     }
 
-    pub fn var(name: String) -> Type {
-        Rc::new(Self::Var(name))
+    pub fn var(name: String, id: NodeId) -> Self {
+        Self::new(MonoType::Var(name), id)
     }
 
-    pub fn typ(name: String) -> Type {
-        Rc::new(Self::Application(name, vec![]))
+    pub fn typ(name: String, id: NodeId) -> Self {
+        Self::new(MonoType::Application(name, vec![]), id)
     }
 
-    pub fn arrow(self: Type, to: Type) -> Type {
-        Rc::new(Self::Arrow(self, to))
+    pub fn arrow(self, to: Self, id: NodeId) -> Self {
+        Self::new(MonoType::Arrow(self, to), id)
     }
 
-    pub fn new_hole(name: String, level: usize) -> Type {
-        Rc::new(Self::Hole(Ref::new(name, level)))
+    pub fn new_hole(name: String, level: usize, id: NodeId) -> Self {
+        Self::new(MonoType::Hole(Ref::new(name, level)), id)
     }
 
-    fn generalize_type(self: &Type, ctx: Ctx, holes: &mut BTreeMap<Ref, String>) -> Type {
+    fn generalize_type(&self, ctx: Ctx, holes: &mut BTreeMap<Ref, String>) -> Self {
+        let id = self.1;
         match &**self {
-            Self::Var(_) => self.clone(),
+            MonoType::Var(_) => self.clone(),
 
-            Self::Tuple(vec) => Rc::new(Self::Tuple(
-                vec.iter()
-                    .map(|mono| mono.generalize_type(ctx.clone(), holes))
-                    .collect(),
-            )),
+            MonoType::Tuple(vec) => Self::new(
+                MonoType::Tuple(
+                    vec.iter()
+                        .map(|mono| mono.generalize_type(ctx.clone(), holes))
+                        .collect(),
+                ),
+                id,
+            ),
 
-            Self::Arrow(from, to) => Rc::new(Self::Arrow(
-                from.generalize_type(ctx.clone(), holes),
-                to.generalize_type(ctx, holes),
-            )),
+            MonoType::Arrow(from, to) => Self::new(
+                MonoType::Arrow(
+                    from.generalize_type(ctx.clone(), holes),
+                    to.generalize_type(ctx, holes),
+                ),
+                id,
+            ),
 
-            Self::Hole(item) => match item.get() {
+            MonoType::Hole(item) => match item.get() {
                 Hole::Filled(typ) => typ.generalize_type(ctx, holes),
                 Hole::Empty(lvl) if lvl > ctx.level => {
                     let name = holes.entry(item.clone()).or_insert_with(|| ctx.new_name());
-                    Self::var(name.clone())
+                    Self::var(name.clone(), id)
                 }
                 Hole::Empty(_) => self.clone(),
             },
 
-            Self::Application(fun, args) => Rc::new(Self::Application(
-                fun.clone(),
-                args.iter()
-                    .cloned()
-                    .map(|a| a.generalize_type(ctx.clone(), holes))
-                    .collect(),
-            )),
+            MonoType::Application(fun, args) => Self::new(
+                MonoType::Application(
+                    fun.clone(),
+                    args.iter()
+                        .cloned()
+                        .map(|a| a.generalize_type(ctx.clone(), holes))
+                        .collect(),
+                ),
+                id,
+            ),
 
-            Self::Error => self.clone(),
+            MonoType::Error => self.clone(),
         }
     }
 
-    pub fn generalize(self: Type, ctx: Ctx) -> Rc<TypeScheme> {
+    pub fn generalize(self, ctx: Ctx) -> Rc<TypeScheme> {
         let mut names = Default::default();
 
         let mono = self.generalize_type(ctx, &mut names);
@@ -430,11 +479,18 @@ pub struct TypeSignature {
 }
 
 impl TypeSignature {
-    pub fn application(&self) -> Type {
-        Rc::new(MonoType::Application(
-            self.name.to_string(),
-            self.params.iter().cloned().map(MonoType::var).collect(),
-        ))
+    pub fn application(&self, id: NodeId) -> Type {
+        Type::new(
+            MonoType::Application(
+                self.name.to_string(),
+                self.params
+                    .iter()
+                    .cloned()
+                    .map(|t| Type::var(t, id))
+                    .collect(),
+            ),
+            id,
+        )
     }
 
     pub fn new_opaque(name: String) -> Self {

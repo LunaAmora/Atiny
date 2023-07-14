@@ -13,7 +13,6 @@ use atiny_tree::r#abstract::*;
 
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
 
 type Elaborated = elaborated::Expr<Type>;
 
@@ -25,16 +24,17 @@ impl Infer for &Expr {
         use AtomKind::*;
         use ExprKind::*;
         ctx.set_position(self.location);
+        let id = ctx.id;
 
         match &self.data {
             Atom(a) => match a {
                 Wildcard => ctx.new_error("`_` may only appear on patterns".to_string()),
 
-                Number(n) => (MonoType::typ("Int".to_string()), Elaborated::Number(*n)),
+                Number(n) => (Type::typ("Int".to_string(), id), Elaborated::Number(*n)),
 
                 Tuple(vec) => {
                     let (typ, el) = vec.iter().map(|expr| expr.infer(ctx.clone())).unzip();
-                    (MonoType::tuple(typ), Elaborated::Tuple(el))
+                    (Type::tuple(typ, id), Elaborated::Tuple(el))
                 }
 
                 Identifier(x) => match ctx.lookup(x) {
@@ -52,7 +52,7 @@ impl Infer for &Expr {
                     None => ctx.new_error(format!("unbound variable '{}'", x)),
                 },
 
-                Path(_, _) => todo!(),
+                PathItem(_) => todo!(),
             },
 
             Application(fun, arg) => {
@@ -60,7 +60,7 @@ impl Infer for &Expr {
                 let (t1, elab_arg) = arg.infer(ctx.clone());
 
                 let t_ret = ctx.new_hole();
-                let function_type = t1.arrow(t_ret.clone());
+                let function_type = t1.arrow(t_ret.clone(), id);
 
                 unify(ctx, t0, function_type);
 
@@ -90,7 +90,7 @@ impl Infer for &Expr {
                     _ => Elaborated::Abstraction([symbol].into(), Box::new(elab_body)),
                 };
 
-                (t.arrow(t_line), abs)
+                (t.arrow(t_line, id), abs)
             }
 
             Match(e, clauses) => {
@@ -172,22 +172,53 @@ impl Infer for &Expr {
 
             RecordCreation(expr, user_fields) => match &expr.data {
                 Atom(AtomKind::Identifier(name)) if ctx.lookup_type(name).is_some() => {
-                    let err_count = ctx.err_count();
-                    ctx.set_position(expr.location);
                     let typ = ctx.lookup_type(name).unwrap();
 
                     let Some((record, ret_type)) =
                         ctx.inst_sig_as_record(typ.clone(), name.to_owned())
                     else {
+                        ctx.set_position(expr.location);
                         return ctx.new_error(format!("the type '{typ}' is not a record"));
                     };
 
+                    let err_count = ctx.err_count();
                     let elab_fields = user_fields.infer((ctx.clone(), record, true));
 
                     let elaborated = if err_count != ctx.err_count() {
                         Elaborated::Error
                     } else {
                         Elaborated::RecordCreation(Symbol(name.to_owned()), elab_fields)
+                    };
+
+                    (ret_type, elaborated)
+                }
+
+                Atom(AtomKind::PathItem(Path(q, item))) => {
+                    let file = ctx.get_file_from_qualifier(q.clone());
+                    ctx.program.return_ctx(ctx.clone());
+
+                    let inst = ctx
+                        .program
+                        .clone()
+                        .get_infered_module::<Vec<_>, _>(file, |ctx| {
+                            let typ = ctx.lookup_type(&item.data).unwrap();
+                            ctx.inst_sig_as_record(typ, item.data.to_owned())
+                        });
+
+                    let Some((record, ret_type)) = inst else {
+                        ctx.set_position(item.location);
+                        return ctx.new_error(format!("the type '{item}' is not a record"));
+                    };
+
+                    let err_count = ctx.err_count();
+                    ctx.set_position(expr.location);
+
+                    let elab_fields = user_fields.infer((ctx.clone(), record, true));
+
+                    let elaborated = if err_count != ctx.err_count() {
+                        Elaborated::Error
+                    } else {
+                        Elaborated::RecordCreation(Symbol(item.data.to_owned()), elab_fields)
                     };
 
                     (ret_type, elaborated)
@@ -309,7 +340,7 @@ impl Infer for &[Statement] {
 impl InferError<(Type, Elaborated)> for Ctx {
     fn new_error(&self, msg: String) -> (Type, Elaborated) {
         self.error(msg);
-        (Rc::new(MonoType::Error), Elaborated::Error)
+        (Type::new(MonoType::Error, self.id), Elaborated::Error)
     }
 }
 
@@ -375,14 +406,23 @@ pub struct RecordInfo {
 
 impl Ctx {
     fn as_record_info(&self, expr_ty: &Type) -> Option<(RecordInfo, Type)> {
+        let ctx = {
+            if self.id != expr_ty.1 {
+                self.program.return_ctx(self.clone());
+                self.get_ctx_by_id(&expr_ty.1)
+            } else {
+                self.clone()
+            }
+        };
+
         expr_ty.get_constructor().and_then(|name| {
-            self.lookup_type(&name)
-                .and_then(|typ| self.inst_sig_as_record(typ, name))
+            ctx.lookup_type(&name)
+                .and_then(|typ| ctx.inst_sig_as_record(typ, name))
         })
     }
 
     fn inst_sig_as_record(&self, sig: TypeSignature, id: String) -> Option<(RecordInfo, Type)> {
-        let mono = sig.application();
+        let mono = sig.application(self.id);
         let TypeSignature { params, value, .. } = sig;
 
         let TypeValue::Product(fields) = value else {

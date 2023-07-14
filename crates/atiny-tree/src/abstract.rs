@@ -3,6 +3,7 @@
 //! [TopLevel].
 
 use std::fmt::{self, Display};
+use std::rc::Rc;
 
 use atiny_location::{Byte, ByteRange, Located};
 use itertools::Itertools;
@@ -25,7 +26,7 @@ pub enum AtomKind<T> {
     Number(u64),
     Tuple(Vec<T>),
     Identifier(String),
-    Path(Qualifier, Located<String>),
+    PathItem(Path),
 }
 
 impl<T> AtomKind<T> {
@@ -41,7 +42,7 @@ impl<T: Display> Display for AtomKind<T> {
             Self::Number(n) => write!(f, "{n}"),
             Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Identifier(id) => write!(f, "{id}"),
-            Self::Path(q, s) => write!(f, "{q}.{s}"),
+            Self::PathItem(p) => write!(f, "{p}"),
         }
     }
 }
@@ -101,7 +102,7 @@ pub enum ExprKind {
     Abstraction(String, Box<Expr>),
     Application(Box<Expr>, Box<Expr>),
     Annotation(Box<Expr>, Box<TypeNode>),
-    RecordCreation(Box<Expr>, Vec<ExprField>),
+    RecordCreation(Box<Expr>, Rc<[ExprField]>),
     Field(Box<Expr>, String),
     Block(Vec<Statement>),
 }
@@ -231,6 +232,16 @@ impl Display for ArrowNode {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Path(pub Qualifier, pub Located<String>);
+
+impl Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self(q, s) = self;
+        write!(f, "{q}::{s}")
+    }
+}
+
 #[derive(Debug)]
 pub struct VariableNode {
     pub name: String,
@@ -283,6 +294,7 @@ impl Display for TypeTupleNode {
 /// The representation of a type in the AST.
 #[derive(Debug)]
 pub enum TypeKind {
+    Path(Path),
     Arrow(ArrowNode),
     Variable(VariableNode),
     Forall(ForallNode),
@@ -302,6 +314,7 @@ impl Display for TypeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Arrow(n) => write!(f, "{}", n),
+            Self::Path(n) => write!(f, "{}", n),
             Self::Variable(n) => write!(f, "{}", n),
             Self::Forall(n) => write!(f, "{}", n),
             Self::Application(n) => write!(f, "{}", n),
@@ -441,7 +454,7 @@ impl Display for UseDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)?;
         if let Some(a) = &self.1 {
-            write!(f, ".{}", a)?;
+            write!(f, "::{}", a)?;
         }
         Ok(())
     }
