@@ -79,7 +79,7 @@ impl Infer for &TypeNode {
                         TypeKind::Variable(VariableNode {
                             name: item.data.clone(),
                         })
-                        .with_loc(self)
+                        .with_loc(item)
                         .infer(ctx.clone())
                     })
             }
