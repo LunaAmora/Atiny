@@ -4,7 +4,8 @@ use crate::exhaustive::{Problem, Witness};
 use crate::types::{MonoType, Type};
 use crate::unify::unify;
 
-use atiny_tree::r#abstract::{wildcard, AtomKind, Pattern, PatternKind};
+use atiny_location::WithLoc;
+use atiny_tree::r#abstract::{wildcard, AtomKind, Path, Pattern, PatternKind};
 use std::collections::HashSet;
 
 impl Infer for Pattern {
@@ -48,7 +49,17 @@ impl Infer for Pattern {
                     id,
                 ),
 
-                PathItem(_) => todo!(),
+                PathItem(Path(q, item)) => {
+                    let file = ctx.get_file_from_qualifier(q);
+                    ctx.program.return_ctx(ctx.clone());
+                    ctx.program
+                        .clone()
+                        .get_infered_module::<Vec<_>, _>(file, |ctx| {
+                            PatternKind::Atom(Identifier(item.data.clone()))
+                                .with_loc(&item)
+                                .infer((ctx, set))
+                        })
+                }
             },
 
             PatternKind::Constructor(name, args) => {

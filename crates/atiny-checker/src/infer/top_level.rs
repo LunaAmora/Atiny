@@ -46,7 +46,7 @@ impl Ctx {
         infered
     }
 
-    pub fn get_file_from_qualifier(&mut self, quali: Qualifier) -> File {
+    pub fn get_file_from_qualifier(&self, quali: Qualifier) -> File {
         let mut prog = self.program.borrow_mut();
         let path = quali.0.into_iter().join(".");
 
@@ -276,7 +276,7 @@ impl Ctx {
                     self.free_variables(arg, set);
                 }
             }
-            TypeKind::Path(_) => {} //Todo: check if this is this correct
+            TypeKind::Path(_) => {}
         }
     }
 }
