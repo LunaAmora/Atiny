@@ -73,9 +73,17 @@ impl Program {
     where
         Parsers: Parser<Out>,
         Out: for<'a> Infer<Context<'a> = &'a mut Ctx>,
+        Out::Return: for<'a> Infer<Context<'a> = Self>,
     {
+        let id = file.id;
         let (mut ctx, parsed) = self.take_or_parse(file);
-        let _ = parsed.infer(&mut ctx);
+
+        let module = parsed.infer(&mut ctx);
+        self.return_ctx(ctx);
+        let _ = module.infer(self.clone());
+
+        let mut ctx = { self.borrow_mut().take_ctx(id).unwrap() };
+
         let result = f(&mut ctx);
         self.return_ctx(ctx);
         result
