@@ -41,7 +41,7 @@ impl Witness {
                 _ => PatternKind::Atom(AtomKind::Tuple(vec)),
             };
             let row = row.prepend(Pattern {
-                location: ByteRange::singleton(0),
+                location: ByteRange::default(),
                 data,
             });
             Self::NonExhaustive(row)

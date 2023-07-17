@@ -1,7 +1,6 @@
 use std::{collections::HashMap, error::Error, io, path::PathBuf, rc::Rc};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct NodeId(pub usize);
+use atiny_location::NodeId;
 
 pub struct Dir {
     pub id: NodeId,

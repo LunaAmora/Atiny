@@ -11,7 +11,7 @@ use std::{
     rc::Rc,
 };
 
-use atiny_parser::io::NodeId;
+use atiny_location::NodeId;
 use atiny_tree::r#abstract::Pattern;
 use itertools::Itertools;
 

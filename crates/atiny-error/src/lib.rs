@@ -1,7 +1,7 @@
 use core::fmt::{Formatter, Result};
 use std::fmt::Display;
 
-use atiny_location::{ByteRange, Point, Range};
+use atiny_location::{ByteRange, NodeId, Point, Range};
 
 pub enum ErrorKind {
     Static(Message),
@@ -52,6 +52,10 @@ impl Error {
             code,
             file_name,
         }
+    }
+
+    pub fn id(&self) -> NodeId {
+        self.location.2
     }
 }
 

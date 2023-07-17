@@ -4,7 +4,8 @@ use std::ops::Deref;
 use std::{cell::RefCell, collections::HashMap, fs::read_to_string, path::PathBuf, rc::Rc};
 
 use atiny_error::Error;
-use atiny_parser::io::{File, FileSystem, NodeId, VirtualFileSystem};
+use atiny_location::NodeId;
+use atiny_parser::io::{File, FileSystem, VirtualFileSystem};
 use atiny_parser::{Parser, Parsers};
 use atiny_tree::elaborated::FnBody;
 
@@ -32,6 +33,7 @@ impl Program {
                 modules: HashMap::new(),
                 elaborated: HashMap::new(),
                 parser: Parsers::default(),
+                errors: Vec::new(),
             })
             .map(|prog| Self(Rc::new(RefCell::new(prog))))
     }
@@ -99,7 +101,7 @@ impl Program {
 
         let top = parsed.map_or_else(
             |err| {
-                ctx.errors.borrow_mut().push(err);
+                self.0.borrow_mut().errors.push(err);
                 None
             },
             Some,
@@ -114,6 +116,7 @@ pub struct Prog {
     pub entry_point: NodeId,
     pub modules: HashMap<NodeId, Option<Ctx>>,
     pub elaborated: HashMap<NodeId, Vec<FnBody<Type>>>,
+    pub errors: Vec<Error>,
     pub parser: Parsers,
 }
 
@@ -138,7 +141,7 @@ impl Prog {
             panic!("ICE: attempted to parse the same file twice")
         };
 
-        self.parser.parse(&file.code)
+        self.parser.parse(file)
     }
 
     pub fn print_errors(&mut self) {
@@ -150,19 +153,12 @@ impl Prog {
     }
 
     pub fn take_errors(&mut self) -> Option<Vec<String>> {
-        let result: Vec<String> = self
-            .modules
-            .values_mut()
-            .map(|module| module.as_ref().expect("ICE: module ctx was missing"))
-            .flat_map(|ctx| {
-                ctx.take_errors()
-                    .into_iter()
-                    .map(|err| {
-                        let file = self.file_system.get_file(ctx.id).unwrap();
-                        let name = self.file_system.get_node_full_name(ctx.id);
-                        err.with_code(&file.code, &name).to_string()
-                    })
-                    .collect::<Vec<_>>()
+        let result: Vec<String> = take(&mut self.errors)
+            .into_iter()
+            .map(|err| {
+                let file = self.file_system.get_file(err.id()).unwrap();
+                let name = self.file_system.get_node_full_name(err.id());
+                err.with_code(&file.code, &name).to_string()
             })
             .collect();
 

@@ -3,10 +3,10 @@ use std::str::FromStr;
 use atiny_tree::r#abstract::*;
 use atiny_location::*;
 
-grammar;
+grammar(id: NodeId);
 
 Loc<T>: Located<T> = {
-    <s: @L> <data: T> <e: @R> => Located { data, location: ByteRange(Byte(s), Byte(e)) }
+    <s: @L> <data: T> <e: @R> => Located { data, location: ByteRange(Byte(s), Byte(e), id) }
 }
 
 //         (Vec,Trailing)
@@ -116,7 +116,7 @@ Term: Expr = {
     InnerExpr,
 };
 
-InfixItem<Left, Infix, Right>: ExprKind = Left Loc<Infix> Right => ExprKind::infix(<>);
+InfixItem<Left, Infix, Right>: ExprKind = Left Loc<Infix> Right => ExprKind::infix(<>, id);
 
 InfixExpr<Left, Infix, Right>: Expr = {
     Loc<InfixItem<Left, Infix, Right>>,

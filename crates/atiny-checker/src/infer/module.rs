@@ -1,6 +1,6 @@
 use crate::infer::Infer;
 use crate::program::Program;
-use atiny_parser::io::NodeId;
+use atiny_location::NodeId;
 use atiny_tree::r#abstract::*;
 use std::ops::{Deref, DerefMut};
 

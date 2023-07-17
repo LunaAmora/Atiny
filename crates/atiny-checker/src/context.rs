@@ -4,8 +4,7 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use atiny_error::{Error, Message, SugestionKind};
-use atiny_location::{ByteRange, Located};
-use atiny_parser::io::NodeId;
+use atiny_location::{ByteRange, Located, NodeId};
 use atiny_tree::r#abstract::TypeDecl;
 use itertools::Itertools;
 
@@ -40,7 +39,6 @@ pub struct Ctx {
     pub program: Program,
     pub imports: Rc<RefCell<im_rc::HashMap<NodeId, Imports>>>,
     counter: Rc<RefCell<usize>>,
-    pub errors: Rc<RefCell<Vec<Error>>>,
     pub map: im_rc::OrdMap<String, Rc<TypeScheme>>,
     pub typ_map: im_rc::OrdSet<String>,
     pub location: ByteRange,
@@ -55,7 +53,6 @@ impl Ctx {
             program,
             imports: Default::default(),
             counter: Default::default(),
-            errors: Default::default(),
             map: Default::default(),
             typ_map: Default::default(),
             location: Default::default(),
@@ -194,19 +191,21 @@ impl Ctx {
     }
 
     pub fn error(&self, msg: String) {
-        self.errors
+        self.program
             .borrow_mut()
+            .errors
             .push(Error::new(Message::Single(msg), self.location));
     }
 
     pub fn errors(&self, msg: Vec<String>) {
-        self.errors
+        self.program
             .borrow_mut()
+            .errors
             .push(Error::new(Message::Multi(msg), self.location));
     }
 
     pub fn suggestion(&self, msg: String, sugestion_kind: SugestionKind) {
-        self.errors.borrow_mut().push(Error::new_sugestion(
+        self.program.borrow_mut().errors.push(Error::new_sugestion(
             Message::Single(msg),
             sugestion_kind,
             self.location,
@@ -214,7 +213,7 @@ impl Ctx {
     }
 
     pub fn suggestions(&self, msg: Vec<String>, sugestion_kind: SugestionKind) {
-        self.errors.borrow_mut().push(Error::new_sugestion(
+        self.program.borrow_mut().errors.push(Error::new_sugestion(
             Message::Multi(msg),
             sugestion_kind,
             self.location,
@@ -222,17 +221,14 @@ impl Ctx {
     }
 
     pub fn dyn_error(&self, msg: impl Display + 'static) {
-        self.errors
+        self.program
             .borrow_mut()
+            .errors
             .push(Error::new_dyn(msg, self.location));
     }
 
-    pub fn take_errors(&self) -> Vec<Error> {
-        std::mem::take(&mut self.errors.borrow_mut())
-    }
-
     pub fn err_count(&self) -> usize {
-        self.errors.borrow().len()
+        self.program.borrow().errors.len()
     }
 
     /// Creates a new hole type.

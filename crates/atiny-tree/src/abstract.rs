@@ -5,7 +5,7 @@
 use std::fmt::{self, Display};
 use std::rc::Rc;
 
-use atiny_location::{Byte, ByteRange, Located};
+use atiny_location::{ByteRange, Located, NodeId};
 use itertools::Itertools;
 
 use crate::SeqHelper;
@@ -138,8 +138,8 @@ impl ExprKind {
         )
     }
 
-    pub fn infix<T: Display>(left: Expr, infix: Located<T>, right: Expr) -> Self {
-        let location = ByteRange(left.location.0, infix.location.1);
+    pub fn infix<T: Display>(left: Expr, infix: Located<T>, right: Expr, id: NodeId) -> Self {
+        let location = ByteRange(left.location.0, infix.location.1, id);
         let call = infix.map(|i| Self::Atom(AtomKind::Identifier(i.to_string())));
 
         let data = Self::Application(Box::new(call), Box::new(left));
@@ -186,7 +186,7 @@ impl PatternKind {
 /// Creates a wildcard pattern
 pub fn wildcard() -> Pattern {
     Pattern {
-        location: ByteRange(Byte(0), Byte(0)),
+        location: ByteRange::default(),
         data: PatternKind::Atom(AtomKind::Wildcard),
     }
 }
