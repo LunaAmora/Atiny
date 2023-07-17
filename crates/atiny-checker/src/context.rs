@@ -177,7 +177,10 @@ impl Ctx {
                         return lookup(&self.get_ctx_by_id(id));
                     };
                 }
-                Imports::Star => return lookup(&self.get_ctx_by_id(id)),
+                Imports::Star => match lookup(&self.get_ctx_by_id(id)) {
+                    None => {}
+                    some => return some,
+                },
                 Imports::Module => {}
             }
         }
@@ -185,6 +188,10 @@ impl Ctx {
     }
 
     pub fn get_ctx_by_id(&self, id: &NodeId) -> Self {
+        if id == &self.id {
+            return self.clone();
+        }
+
         self.program.borrow().modules[id]
             .clone()
             .expect("ICE: context was not stored in the program")
