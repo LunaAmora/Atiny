@@ -21,7 +21,10 @@ Sep<U, T>: (Vec<T>, bool) = {
     }
 };
 
-BlockList<U, T>: Vec<T> = "{" <Sep<U, T>> "}"  => <>.0;
+BlockList<U, T>: Vec<T> = {
+    r"[{][\s]*[}]"      => Vec::new(),
+    "{" <Sep<U, T>> "}" => <>.0
+};
 
 Path: (Vec<Located<String>>, Located<String>) = {
     <s:Loc<UpperId>> <e:("::" <Loc<LowerId>>)> => {
@@ -90,12 +93,18 @@ Statement: StatementKind = {
     Expr => StatementKind::Expr(<>)
 }
 
-Block: Vec<Statement> = {
-    Loc<r"[{][\s]*[}]"> => vec![StatementKind::Expr(ExprKind::Atom(AtomKind::unit()).with_loc(&<>)).with_loc(&<>)],
-    BlockList<";", Loc<Statement>>
-};
+Block: Vec<Statement> = BlockList<";", Loc<Statement>>;
 
-BlockExpr: Expr = Loc<Block> => <>.map(|block|  ExprKind::Block(block));
+BlockExpr: Expr = Loc<Block> => {
+    let location = <>.location;
+    let data = ExprKind::Block(if <>.data.is_empty() {
+        vec![StatementKind::Expr(ExprKind::Atom(AtomKind::unit()).with_loc(&<>)).with_loc(&<>)]
+    } else {
+        <>.data
+    });
+    
+    Located { data, location }
+};
 
 #[inline]
 InnerExpr: Expr = {
