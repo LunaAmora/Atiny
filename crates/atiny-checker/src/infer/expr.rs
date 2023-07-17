@@ -8,6 +8,7 @@ use crate::types::{MonoType, Type, TypeScheme, TypeSignature, TypeValue};
 use crate::unify::unify;
 
 use atiny_error::SugestionKind;
+use atiny_location::WithLoc;
 use atiny_tree::elaborated::{self, CaseTree, Stmt, Symbol, VariableNode};
 use atiny_tree::r#abstract::*;
 
@@ -52,7 +53,18 @@ impl Infer for &Expr {
                     None => ctx.new_error(format!("unbound variable '{}'", x)),
                 },
 
-                PathItem(_) => todo!(),
+                PathItem(Path(q, item)) => {
+                    let file = ctx.get_file_from_qualifier(q.clone());
+                    ctx.program.return_ctx(ctx.clone());
+
+                    ctx.program
+                        .clone()
+                        .get_infered_module::<Vec<_>, _>(file, |ctx| {
+                            Atom(Identifier(item.data.clone()))
+                                .with_loc(item)
+                                .infer(ctx.clone())
+                        })
+                }
             },
 
             Application(fun, arg) => {
