@@ -4,8 +4,9 @@ use crate::exhaustive::{Problem, Witness};
 use crate::types::{MonoType, Type};
 use crate::unify::unify;
 
-use atiny_tree::r#abstract::{wildcard, AtomKind, Pattern, PatternKind};
-use std::{collections::HashSet, rc::Rc};
+use atiny_location::WithLoc;
+use atiny_tree::r#abstract::{wildcard, AtomKind, Path, Pattern, PatternKind};
+use std::collections::HashSet;
 
 impl Infer for Pattern {
     type Context<'a> = (&'a mut Ctx, &'a mut HashSet<String>);
@@ -14,12 +15,22 @@ impl Infer for Pattern {
     fn infer(self, (ctx, set): Self::Context<'_>) -> Self::Return {
         use AtomKind::*;
         ctx.set_position(self.location);
+        let id = ctx.id;
 
         match self.data {
             PatternKind::Atom(a) => match a {
                 Wildcard => ctx.new_hole(),
 
-                Number(_) => MonoType::typ("Int".to_string()),
+                Number(_) => Type::typ("Int".to_string(), id),
+
+                Identifier(x) if x.starts_with(|c: char| c.is_ascii_uppercase()) => {
+                    if ctx.lookup_cons(&x).is_some() {
+                        Self::new(self.location, PatternKind::Constructor(x, vec![]))
+                            .infer((ctx, set))
+                    } else {
+                        ctx.new_error(format!("unbound constructor: {}", x))
+                    }
+                }
 
                 Identifier(x) if ctx.lookup_cons(&x).is_some() => {
                     Self::new(self.location, PatternKind::Constructor(x, vec![])).infer((ctx, set))
@@ -27,15 +38,24 @@ impl Infer for Pattern {
 
                 Identifier(x) if set.insert(x.to_owned()) => {
                     let hole = ctx.new_hole();
-                    *ctx = ctx.extend(x, hole.to_poly());
+                    ctx.map.insert(x, hole.to_poly());
                     hole
                 }
 
                 Identifier(x) => ctx.new_error(format!("identifier '{}' bound more than once", x)),
 
-                Tuple(vec) => Rc::new(MonoType::Tuple(
-                    vec.into_iter().map(|pat| pat.infer((ctx, set))).collect(),
-                )),
+                Tuple(vec) => Type::new(
+                    MonoType::Tuple(vec.into_iter().map(|pat| pat.infer((ctx, set))).collect()),
+                    id,
+                ),
+
+                PathItem(ref path @ Path(_, ref item)) => ctx
+                    .ctx_from_path(path, |ctx| {
+                        PatternKind::Atom(Identifier(item.data.clone()))
+                            .with_loc(item)
+                            .infer((ctx, set))
+                    })
+                    .unwrap_or_else(|| ctx.infer_error()),
             },
 
             PatternKind::Constructor(name, args) => {

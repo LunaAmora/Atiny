@@ -3,10 +3,11 @@ use std::str::FromStr;
 use atiny_tree::r#abstract::*;
 use atiny_location::*;
 
-grammar;
+grammar(id: NodeId);
 
+#[inline]
 Loc<T>: Located<T> = {
-    <s: @L> <data: T> <e: @R> => Located { data, location: ByteRange(Byte(s), Byte(e)) }
+    <s: @L> <data: T> <e: @R> => Located { data, location: ByteRange(Byte(s), Byte(e), id) }
 }
 
 //         (Vec,Trailing)
@@ -21,13 +22,38 @@ Sep<U, T>: (Vec<T>, bool) = {
     }
 };
 
-BlockList<U, T>: Vec<T> = "{" <Sep<U, T>> "}"  => <>.0;
+BlockList<U, T>: Vec<T> = {
+    r"[{][\s]*[}]"      => Vec::new(),
+    "{" <Sep<U, T>> "}" => <>.0
+};
+
+Path: (Vec<Located<String>>, Located<String>) = {
+    <s:Loc<UpperId>> <e:("::" <Loc<LowerId>>)> => {
+        (vec![s], e)
+    },
+
+    <s:Loc<UpperId>> <mut v:("::" <Loc<UpperId>>)+> <e:("::" <Loc<LowerId>>)?> => match e {
+        Some(e) => {
+            let mut res = vec![s];
+            res.extend(v);
+            (res, e)
+        }
+
+        None => {
+            let e = v.pop().unwrap();
+            let mut res = vec![s];
+            res.extend(v);
+            (res, e)
+        }
+    },
+};
 
 // O: From<AtomKind<O>>
 AtomItem<I, O> : O = {
     "_" => AtomKind::Wildcard.into(),
     Num => AtomKind::Number(<>).into(),
     Id  => AtomKind::Identifier(<>).into(),
+    Path => AtomKind::PathItem(Path(Qualifier(<>.0), <>.1)).into(),
     "(" <mut sep:Sep<",", I>> ")" => {
         let (mut vec, trailing) = sep;
 
@@ -68,12 +94,18 @@ Statement: StatementKind = {
     Expr => StatementKind::Expr(<>)
 }
 
-Block: Vec<Statement> = {
-    Loc<r"[{][\s]*[}]"> => vec![<>.clone().map(|_| StatementKind::Expr(<>.map(|_| ExprKind::Atom(AtomKind::unit()))))],
-    BlockList<";", Loc<Statement>>
-};
+Block: Vec<Statement> = BlockList<";", Loc<Statement>>;
 
-BlockExpr: Expr = Loc<Block> => <>.map(|block|  ExprKind::Block(block));
+BlockExpr: Expr = Loc<Block> => {
+    let location = <>.location;
+    let data = ExprKind::Block(if <>.data.is_empty() {
+        vec![StatementKind::Expr(ExprKind::Atom(AtomKind::unit()).with_loc(&<>)).with_loc(&<>)]
+    } else {
+        <>.data
+    });
+    
+    Located { data, location }
+};
 
 #[inline]
 InnerExpr: Expr = {
@@ -83,7 +115,7 @@ InnerExpr: Expr = {
 }
 
 RecordItem: ExprKind = {
-    <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f)
+    <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f.into())
 }
 
 OuterItem: ExprKind = Item<Loc<RecordItem>>;
@@ -94,7 +126,7 @@ Term: Expr = {
     InnerExpr,
 };
 
-InfixItem<Left, Infix, Right>: ExprKind = Left Loc<Infix> Right => ExprKind::infix(<>);
+InfixItem<Left, Infix, Right>: ExprKind = Left Loc<Infix> Right => ExprKind::infix(<>, id);
 
 InfixExpr<Left, Infix, Right>: Expr = {
     Loc<InfixItem<Left, Infix, Right>>,
@@ -130,8 +162,13 @@ ExprField: ExprField = <name: LowerId> "=" <expr: Expr> => ExprField {<>};
 
 // For Types
 
+TypePath: Path = {
+    <a:(<Loc<UpperId>> "::")+> <b:Loc<UpperId>> => Path(Qualifier(a), b)
+}
+
 TypeAtomItem: TypeKind = {
     <name: Id> => TypeKind::Variable(VariableNode {<>}),
+    TypePath => TypeKind::Path(<>),
     "(" <mut sep:Sep<",", TypeNode>> ")" => {
         let (mut types, trailing) = sep;
 
@@ -146,7 +183,15 @@ TypeAtomItem: TypeKind = {
 TypeAtom: TypeNode = Loc<TypeAtomItem>;
 
 TypeCallItem: TypeKind = {
-    <fun:UpperId> <args:TypeAtom+> => TypeKind::Application(TypeApplicationNode {<>}),
+    <fun:Loc<UpperId>> <args:TypeAtom+> => TypeKind::Application(TypeApplicationNode {
+        fun: Path(Qualifier(Vec::new()), fun),
+        args
+    }),
+
+    <fun:TypePath> <args:TypeAtom+> => TypeKind::Application(TypeApplicationNode {
+        fun,
+        args
+    })
 }
 
 TypeCall: TypeNode = {
@@ -193,9 +238,18 @@ Param: (Pattern, TypeNode) = "(" <Pattern> <TypeAnotation> ")" => (<>);
 
 FnDecl: FnDecl = "fn" <Loc<LowerId>> <Param*> <TypeAnotation?> <BlockExpr> => FnDecl::new(<>);
 
+UsePath: (Vec<Located<String>>, Option<Located<String>>) = {
+    <a:(<Loc<UpperId>> "::")+> <b:Loc<Id>> => (a, Some(b)),
+    <a:(<Loc<UpperId>> "::")+> <b:Loc<"*">> => (a, Some(b.map(|star| star.to_string()))),
+    <Loc<UpperId>> => (vec![<>], None)
+};
+
+UseDecl: UseDecl = "use" <UsePath> => UseDecl(Qualifier(<>.0), <>.1);
+
 TopLevelKind: TopLevelKind = {
     FnDecl   => TopLevelKind::FnDecl(<>), 
-    TypeDecl => TopLevelKind::TypeDecl(<>), 
+    TypeDecl => TopLevelKind::TypeDecl(<>),
+    UseDecl  => TopLevelKind::UseDecl(<>),
 }
 
 TopLevel: TopLevel = Loc<TopLevelKind>;

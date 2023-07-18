@@ -3,9 +3,42 @@
 //! [TopLevel].
 
 use std::fmt::{self, Display};
+use std::rc::Rc;
 
-use atiny_location::{Byte, ByteRange, Located};
+use atiny_location::{ByteRange, Located, NodeId};
 use itertools::Itertools;
+
+use atiny_misc::SeqHelper;
+
+#[derive(Debug, Clone)]
+pub struct Qualifier(pub Vec<Located<String>>);
+
+impl Qualifier {
+    pub fn location(&self) -> Option<ByteRange> {
+        let first = self.0.first();
+        let last = self.0.last();
+
+        if let Some((start, end)) = first.zip(last) {
+            Some(ByteRange(
+                start.location.0,
+                end.location.1,
+                start.location.2,
+            ))
+        } else {
+            None
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Display for Qualifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.iter().join("::"))
+    }
+}
 
 /// Primary expressions that are used both for [Pattern] and [Expr].
 #[derive(Debug, Clone)]
@@ -14,6 +47,7 @@ pub enum AtomKind<T> {
     Number(u64),
     Tuple(Vec<T>),
     Identifier(String),
+    PathItem(Path),
 }
 
 impl<T> AtomKind<T> {
@@ -29,6 +63,7 @@ impl<T: Display> Display for AtomKind<T> {
             Self::Number(n) => write!(f, "{n}"),
             Self::Tuple(t) => write!(f, "({})", t.iter().join(", ")),
             Self::Identifier(id) => write!(f, "{id}"),
+            Self::PathItem(p) => write!(f, "{p}"),
         }
     }
 }
@@ -88,7 +123,7 @@ pub enum ExprKind {
     Abstraction(String, Box<Expr>),
     Application(Box<Expr>, Box<Expr>),
     Annotation(Box<Expr>, Box<TypeNode>),
-    RecordCreation(Box<Expr>, Vec<ExprField>),
+    RecordCreation(Box<Expr>, Rc<[ExprField]>),
     Field(Box<Expr>, String),
     Block(Vec<Statement>),
 }
@@ -124,8 +159,8 @@ impl ExprKind {
         )
     }
 
-    pub fn infix<T: Display>(left: Expr, infix: Located<T>, right: Expr) -> Self {
-        let location = ByteRange(left.location.0, infix.location.1);
+    pub fn infix<T: Display>(left: Expr, infix: Located<T>, right: Expr, id: NodeId) -> Self {
+        let location = ByteRange(left.location.0, infix.location.1, id);
         let call = infix.map(|i| Self::Atom(AtomKind::Identifier(i.to_string())));
 
         let data = Self::Application(Box::new(call), Box::new(left));
@@ -172,7 +207,7 @@ impl PatternKind {
 /// Creates a wildcard pattern
 pub fn wildcard() -> Pattern {
     Pattern {
-        location: ByteRange(Byte(0), Byte(0)),
+        location: ByteRange::default(),
         data: PatternKind::Atom(AtomKind::Wildcard),
     }
 }
@@ -218,6 +253,20 @@ impl Display for ArrowNode {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Path(pub Qualifier, pub Located<String>);
+
+impl Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self(q, s) = self;
+        if q.is_empty() {
+            write!(f, "{s}")
+        } else {
+            write!(f, "{q}::{s}")
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct VariableNode {
     pub name: String,
@@ -245,7 +294,7 @@ impl Display for ForallNode {
 
 #[derive(Debug)]
 pub struct TypeApplicationNode {
-    pub fun: String,
+    pub fun: Path,
     pub args: Vec<TypeNode>,
 }
 
@@ -270,6 +319,7 @@ impl Display for TypeTupleNode {
 /// The representation of a type in the AST.
 #[derive(Debug)]
 pub enum TypeKind {
+    Path(Path),
     Arrow(ArrowNode),
     Variable(VariableNode),
     Forall(ForallNode),
@@ -289,6 +339,7 @@ impl Display for TypeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Arrow(n) => write!(f, "{}", n),
+            Self::Path(n) => write!(f, "{}", n),
             Self::Variable(n) => write!(f, "{}", n),
             Self::Forall(n) => write!(f, "{}", n),
             Self::Application(n) => write!(f, "{}", n),
@@ -422,9 +473,69 @@ impl Display for FnDecl {
 }
 
 #[derive(Debug)]
+pub struct UseDecl(pub Qualifier, pub Option<Located<String>>);
+
+impl Display for UseDecl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self(q, s) = self;
+        write!(f, "{}", q)?;
+
+        if let Some(a) = &s {
+            if !q.is_empty() {
+                write!(f, "::")?;
+            }
+
+            write!(f, "{}", a)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
 pub enum TopLevelKind {
     TypeDecl(TypeDecl),
     FnDecl(FnDecl),
+    UseDecl(UseDecl),
+}
+
+impl SeqHelper<TopLevel> for TypeDecl {
+    fn is_variant(enumerator: &TopLevel) -> bool {
+        matches!(enumerator.data, TopLevelKind::TypeDecl(_))
+    }
+
+    fn get_variant(enumerator: TopLevel) -> Option<Self> {
+        match enumerator.data {
+            TopLevelKind::TypeDecl(d) => Some(d),
+            _ => None,
+        }
+    }
+}
+
+impl SeqHelper<TopLevel> for FnDecl {
+    fn is_variant(enumerator: &TopLevel) -> bool {
+        matches!(enumerator.data, TopLevelKind::FnDecl(_))
+    }
+
+    fn get_variant(enumerator: TopLevel) -> Option<Self> {
+        match enumerator.data {
+            TopLevelKind::FnDecl(d) => Some(d),
+            _ => None,
+        }
+    }
+}
+
+impl SeqHelper<TopLevel> for UseDecl {
+    fn is_variant(enumerator: &TopLevel) -> bool {
+        matches!(enumerator.data, TopLevelKind::UseDecl(_))
+    }
+
+    fn get_variant(enumerator: TopLevel) -> Option<Self> {
+        match enumerator.data {
+            TopLevelKind::UseDecl(d) => Some(d),
+            _ => None,
+        }
+    }
 }
 
 /// It's a declaration on the top level of the program. It can be a function definition, a type
@@ -436,6 +547,7 @@ impl Display for TopLevelKind {
         match self {
             Self::TypeDecl(td) => write!(f, "{}", td),
             Self::FnDecl(fd) => write!(f, "{}", fd),
+            Self::UseDecl(ud) => write!(f, "{}", ud),
         }
     }
 }

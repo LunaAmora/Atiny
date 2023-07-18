@@ -3,8 +3,8 @@
 use super::Infer;
 use crate::{context::*, types::*};
 
-use atiny_tree::r#abstract::{TypeKind, TypeNode};
-use std::rc::Rc;
+use atiny_location::WithLoc;
+use atiny_tree::r#abstract::{Path, TypeApplicationNode, TypeKind, TypeNode, VariableNode};
 
 impl Infer for &TypeNode {
     type Context<'a> = Ctx;
@@ -12,31 +12,35 @@ impl Infer for &TypeNode {
 
     fn infer(self, mut ctx: Self::Context<'_>) -> Self::Return {
         ctx.set_position(self.location);
+        let id = ctx.id;
 
         match &self.data {
             TypeKind::Arrow(arrow) => {
                 let left = arrow.left.infer(ctx.clone());
                 let right = arrow.right.infer(ctx);
-                left.arrow(right)
+                left.arrow(right, id)
             }
 
             TypeKind::Variable(v) => {
-                if ctx.signatures.types.get(&v.name).is_some() {
-                    MonoType::typ(v.name.to_owned())
+                if ctx.lookup_type(&v.name).is_some() {
+                    Type::typ(v.name.to_owned(), id)
                 } else if ctx.typ_map.contains(&v.name) {
-                    MonoType::var(v.name.to_owned())
+                    Type::var(v.name.to_owned(), id)
                 } else {
                     ctx.new_error(format!("unbound type variable '{}'", v.name))
                 }
             }
 
-            TypeKind::Tuple(tuple) => Rc::new(MonoType::Tuple(
-                tuple
-                    .types
-                    .iter()
-                    .map(|typ| typ.infer(ctx.clone()))
-                    .collect(),
-            )),
+            TypeKind::Tuple(tuple) => Type::new(
+                MonoType::Tuple(
+                    tuple
+                        .types
+                        .iter()
+                        .map(|typ| typ.infer(ctx.clone()))
+                        .collect(),
+                ),
+                id,
+            ),
 
             // TODO: Error when try to infer a forall inside other types.
             TypeKind::Forall(forall) => {
@@ -48,20 +52,36 @@ impl Infer for &TypeNode {
                 .0
             }
 
-            TypeKind::Application(app) => match ctx.signatures.types.get(&app.fun) {
-                Some(sig) if sig.params.len() == app.args.len() => Rc::new(MonoType::Application(
-                    sig.name.clone(),
-                    app.args.iter().map(|typ| typ.infer(ctx.clone())).collect(),
-                )),
+            TypeKind::Application(TypeApplicationNode { fun, args }) => {
+                let Path(_, item) = fun;
+                match ctx.path_map(fun, |ctx| ctx.lookup_type(&item.data)) {
+                    Some(sig) if sig.params.len() == args.len() => Type::new(
+                        MonoType::Application(
+                            sig.name,
+                            args.iter().map(|typ| typ.infer(ctx.clone())).collect(),
+                        ),
+                        ctx.id,
+                    ),
 
-                Some(sig) => ctx.new_error(format!(
-                    "expected {} arguments but got {} in type",
-                    sig.params.len(),
-                    app.args.len()
-                )),
+                    Some(sig) => ctx.new_error(format!(
+                        "expected {} arguments but got {} in type",
+                        sig.params.len(),
+                        args.len()
+                    )),
 
-                None => ctx.new_error(format!("unbound variable '{}'", app.fun)),
-            },
+                    None => ctx.new_error(format!("unbound variable '{}'", fun)),
+                }
+            }
+
+            TypeKind::Path(path @ Path(_, item)) => ctx
+                .ctx_from_path(path, |ctx| {
+                    TypeKind::Variable(VariableNode {
+                        name: item.data.clone(),
+                    })
+                    .with_loc(item)
+                    .infer(ctx.clone())
+                })
+                .unwrap_or_else(|| ctx.infer_error()),
         }
     }
 }

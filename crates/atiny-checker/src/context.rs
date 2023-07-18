@@ -4,9 +4,11 @@
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use atiny_error::{Error, Message, SugestionKind};
-use atiny_location::ByteRange;
-use atiny_tree::r#abstract::TypeDecl;
+use atiny_location::{ByteRange, Located, NodeId};
+use atiny_tree::r#abstract::{Path, TypeDecl};
 use itertools::Itertools;
+
+use crate::{infer::Infer, program::Program};
 
 use super::types::*;
 
@@ -24,22 +26,43 @@ impl Display for Signatures {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum Imports {
+    Star,
+    Module,
+    Items(Vec<String>),
+}
+
+impl Display for Imports {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Star => write!(f, "*"),
+            Self::Module => write!(f, "Module"),
+            Self::Items(_) => write!(f, "Items(...)"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Ctx {
+    pub id: NodeId,
+    pub program: Program,
+    pub imports: Rc<RefCell<im_rc::HashMap<NodeId, Imports>>>,
     counter: Rc<RefCell<usize>>,
-    pub errors: Rc<RefCell<Vec<Error>>>,
     pub map: im_rc::OrdMap<String, Rc<TypeScheme>>,
     pub typ_map: im_rc::OrdSet<String>,
-    pub location: ByteRange,
+    pub location: RefCell<ByteRange>,
     pub level: usize,
     pub signatures: Signatures,
 }
 
-impl Default for Ctx {
-    fn default() -> Self {
+impl Ctx {
+    pub fn new(id: NodeId, program: Program) -> Self {
         let mut ctx = Self {
+            id,
+            program,
+            imports: Default::default(),
             counter: Default::default(),
-            errors: Default::default(),
             map: Default::default(),
             typ_map: Default::default(),
             location: Default::default(),
@@ -52,8 +75,8 @@ impl Default for Ctx {
             TypeSignature::new_opaque("Int".to_string()),
         );
 
-        let int = MonoType::typ("Int".to_string());
-        let sig = MonoType::arrow(int.clone(), MonoType::arrow(int.clone(), int)).to_poly();
+        let int = Type::typ("Int".to_string(), id);
+        let sig = int.clone().arrow(int.clone().arrow(int, id), id).to_poly();
 
         ctx.map.extend([
             ("add".to_string(), sig.clone()),
@@ -62,7 +85,11 @@ impl Default for Ctx {
             ("div".to_string(), sig),
         ]);
 
-        ctx.extend_type_sigs(Some(TypeDecl::unit()));
+        #[allow(clippy::let_unit_value)]
+        {
+            let cons = TypeDecl::unit().infer(&mut ctx);
+            let _ = cons.infer(&mut ctx);
+        }
 
         ctx
     }
@@ -104,8 +131,8 @@ impl Ctx {
     }
 
     /// Sets the current location that we are type checking inside of the context.
-    pub fn set_position(&mut self, location: ByteRange) {
-        self.location = location;
+    pub fn set_position(&self, location: ByteRange) {
+        *self.location.borrow_mut() = location;
     }
 
     /// Creates a new name for a type variable.
@@ -121,12 +148,16 @@ impl Ctx {
 
     /// Looks up a type variable name in the context.
     pub fn lookup(&self, name: &str) -> Option<Rc<TypeScheme>> {
-        self.map.get(name).cloned().or_else(|| {
-            self.signatures.values.get(name).map(|decl| match decl {
-                DeclSignature::Function(fun) => fun.entire_type.clone(),
-                DeclSignature::Constructor(decl) => decl.typ.clone(),
+        self.map
+            .get(name)
+            .cloned()
+            .or_else(|| {
+                self.signatures.values.get(name).map(|decl| match decl {
+                    DeclSignature::Function(fun) => fun.entire_type.clone(),
+                    DeclSignature::Constructor(decl) => decl.typ.clone(),
+                })
             })
-        })
+            .or_else(|| self.lookup_on_imports(name, |ctx| ctx.lookup(name)))
     }
 
     pub fn lookup_cons(&self, name: &str) -> Option<Rc<ConstructorSignature>> {
@@ -137,73 +168,215 @@ impl Ctx {
                 DeclSignature::Function(_) => None,
                 DeclSignature::Constructor(cons) => Some(cons.clone()),
             })
+            .or_else(|| self.lookup_on_imports(name, |ctx| ctx.lookup_cons(name)))
     }
 
-    pub fn lookup_type(&self, name: &str) -> Option<&TypeSignature> {
-        self.signatures.types.get(name)
+    pub fn lookup_type(&self, name: &str) -> Option<TypeSignature> {
+        self.signatures
+            .types
+            .get(name)
+            .cloned()
+            .or_else(|| self.lookup_on_imports(name, |ctx| ctx.lookup_type(name)))
+    }
+
+    fn lookup_on_imports<T>(&self, name: &str, lookup: impl Fn(&Self) -> Option<T>) -> Option<T> {
+        for (&id, import) in self.imports.borrow().iter() {
+            match import {
+                Imports::Items(items) => {
+                    if items.iter().any(|i| name.eq(i.as_str())) {
+                        return lookup(&self.get_ctx_by_id(id));
+                    };
+                }
+                Imports::Star => match lookup(&self.get_ctx_by_id(id)) {
+                    None => {}
+                    some => return some,
+                },
+                Imports::Module => {}
+            }
+        }
+        None
+    }
+
+    pub fn get_ctx_by_id(&self, id: NodeId) -> Self {
+        if id == self.id {
+            return self.clone();
+        }
+
+        self.program
+            .get_ctx(id)
+            .expect("ICE: context was not stored in the program")
+    }
+
+    pub fn ctx_from_path<R>(&self, path: &Path, f: impl FnMut(&mut Self) -> R) -> Option<R> {
+        let Path(qualifier, item) = path;
+
+        let Some(file) = self.get_file_from_qualifier(qualifier) else {
+            return None;
+        };
+
+        match self.imports.borrow().get(&file.id) {
+            Some(imports) => match imports {
+                Imports::Items(i) if !i.contains(&item.data) => {
+                    self.set_position(item.location);
+                    self.error(format!(
+                        "Module '{}' is not imported. Import it or the item '{}' directly",
+                        qualifier, item.data
+                    ));
+                    None
+                }
+
+                imports => {
+                    if matches!(imports, Imports::Star) {
+                        //todo: Accept, but Lint that the use of a path is unecessary
+                    }
+
+                    self.program.update_ctx(self.clone());
+                    self.program.get_infered_module(file.id, f)
+                }
+            },
+
+            None => {
+                self.set_position(qualifier.location().unwrap());
+                self.error(format!("Invalid Path: {}", qualifier));
+                None
+            }
+        }
+    }
+
+    pub fn path_map<R>(
+        &mut self,
+        path: &Path,
+        mut f: impl FnMut(&mut Self) -> Option<R>,
+    ) -> Option<R> {
+        if path.0.is_empty() {
+            f(self)
+        } else {
+            self.ctx_from_path(path, f).flatten()
+        }
     }
 
     pub fn error(&self, msg: String) {
-        self.errors
-            .borrow_mut()
-            .push(Error::new(Message::Single(msg), self.location));
+        self.program.borrow_mut().errors.push(Error::new(
+            Message::Single(msg),
+            self.location.borrow().to_owned(),
+        ));
     }
 
     pub fn errors(&self, msg: Vec<String>) {
-        self.errors
-            .borrow_mut()
-            .push(Error::new(Message::Multi(msg), self.location));
+        self.program.borrow_mut().errors.push(Error::new(
+            Message::Multi(msg),
+            self.location.borrow().to_owned(),
+        ));
     }
 
     pub fn suggestion(&self, msg: String, sugestion_kind: SugestionKind) {
-        self.errors.borrow_mut().push(Error::new_sugestion(
+        self.program.borrow_mut().errors.push(Error::new_sugestion(
             Message::Single(msg),
             sugestion_kind,
-            self.location,
+            self.location.borrow().to_owned(),
         ));
     }
 
     pub fn suggestions(&self, msg: Vec<String>, sugestion_kind: SugestionKind) {
-        self.errors.borrow_mut().push(Error::new_sugestion(
+        self.program.borrow_mut().errors.push(Error::new_sugestion(
             Message::Multi(msg),
             sugestion_kind,
-            self.location,
+            self.location.borrow().to_owned(),
         ));
     }
 
     pub fn dyn_error(&self, msg: impl Display + 'static) {
-        self.errors
+        self.program
             .borrow_mut()
-            .push(Error::new_dyn(msg, self.location));
-    }
-
-    pub fn take_errors(&self) -> Option<Vec<Error>> {
-        let is_not_empty = { !self.errors.borrow().is_empty() };
-
-        is_not_empty.then_some({
-            let mut result = vec![];
-            result.append(&mut self.errors.borrow_mut());
-            result
-        })
+            .errors
+            .push(Error::new_dyn(msg, self.location.borrow().to_owned()));
     }
 
     pub fn err_count(&self) -> usize {
-        self.errors.borrow().len()
+        self.program.borrow().errors.len()
     }
 
     /// Creates a new hole type.
     pub fn new_hole(&self) -> Type {
-        MonoType::new_hole(self.new_name(), self.level)
+        Type::new_hole(self.new_name(), self.level, self.id)
+    }
+
+    pub fn register_imports(&mut self, ctx: &Self, item: Option<Located<String>>) {
+        let imports = match item {
+            None => Imports::Module,
+
+            Some(item) if item.data.eq("*") => Imports::Star,
+
+            Some(item) if item.data.starts_with(|c: char| c.is_ascii_uppercase()) => {
+                let mut names = Vec::new();
+
+                match ctx.lookup_type(&item.data) {
+                    Some(sig) => {
+                        names.push(sig.name);
+                        for name in sig.names {
+                            names.push(name);
+                        }
+                    }
+
+                    None => {
+                        self.set_position(item.location);
+                        self.error(format!("could not find Type '{}' import", item));
+                        return;
+                    }
+                }
+
+                Imports::Items(names)
+            }
+
+            Some(item) => Imports::Items(vec![item.data]),
+        };
+
+        self.update_imports(ctx.id, imports);
+    }
+
+    pub fn update_imports(&mut self, id: NodeId, new: Imports) {
+        let mut imports = self.imports.borrow_mut();
+        use Imports::*;
+
+        match imports.get_mut(&id) {
+            None => _ = imports.insert(id, new),
+
+            Some(old) => match (old, new) {
+                (Star, Star) => {}
+                (Star, Items(_)) => {}
+                (Module, Module) => {}
+
+                (old @ Star, new @ Module)
+                | (old @ Module, new @ Star)
+                | (old @ Module, new @ Items(_))
+                | (old @ Items(_), new @ Module) => self.error(format!(
+                    "can not import as '{}' the same module that was already imported as '{}'",
+                    new, old
+                )),
+
+                (Items(_), Star) => _ = imports.insert(id, Star),
+                (Items(ref mut items), Items(names)) => items.extend(names),
+            },
+        }
     }
 }
 
 pub trait InferError<T> {
-    fn new_error(&self, msg: String) -> T;
+    fn new_error(&self, msg: String) -> T {
+        self.error_message(msg);
+        self.infer_error()
+    }
+
+    fn error_message(&self, msg: String);
+    fn infer_error(&self) -> T;
 }
 
 impl InferError<Type> for Ctx {
-    fn new_error(&self, msg: String) -> Type {
+    fn error_message(&self, msg: String) {
         self.error(msg);
-        Rc::new(MonoType::Error)
+    }
+
+    fn infer_error(&self) -> Type {
+        Type::new(MonoType::Error, self.id)
     }
 }

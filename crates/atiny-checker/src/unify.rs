@@ -1,7 +1,7 @@
 //! This module exposes functions like [unify] and [occur_check] for unification and occur checking
 //! that are useful for the checker to check if two types are equal. These functions produce side
 //! effects.
-use std::{fmt::Display, rc::Rc};
+use std::fmt::Display;
 
 use crate::{
     context::Ctx,
@@ -27,7 +27,7 @@ impl Display for TypeMismatch {
 
 /// Tries to find a general unifier for two types, it fails if these two types are not "equal".
 pub fn unify(ctx: Ctx, left: Type, right: Type) {
-    if Rc::ptr_eq(&left, &right) {
+    if left == right {
         return;
     }
 

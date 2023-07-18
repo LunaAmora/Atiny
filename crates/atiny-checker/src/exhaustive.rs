@@ -41,7 +41,7 @@ impl Witness {
                 _ => PatternKind::Atom(AtomKind::Tuple(vec)),
             };
             let row = row.prepend(Pattern {
-                location: ByteRange::singleton(0),
+                location: ByteRange::default(),
                 data,
             });
             Self::NonExhaustive(row)
@@ -199,8 +199,13 @@ impl Matrix {
     /// constructor on the context.
     fn get_used_constructor(ctx: &Ctx, pat: &PatternKind) -> Option<String> {
         match pat {
-            PatternKind::Atom(AtomKind::Identifier(id)) => ctx.lookup_cons(id).map(|_| id.clone()),
             PatternKind::Constructor(name, _) => Some(name.clone()),
+            PatternKind::Atom(AtomKind::Identifier(id)) => ctx.lookup_cons(id).map(|_| id.clone()),
+            PatternKind::Atom(AtomKind::PathItem(path @ Path(_, item))) => ctx
+                .ctx_from_path(path, |ctx| {
+                    ctx.lookup_cons(&item.data).map(|_| item.data.clone())
+                })
+                .expect("ICE: Typechecker should have catched this"),
             _ => None,
         }
     }
@@ -342,7 +347,7 @@ impl Problem {
             .lookup_type(name)
             .unwrap_or_else(|| panic!("cannot find type '{name}'"));
 
-        match type_sig.value.clone() {
+        match type_sig.value {
             TypeValue::Sum(sum) => {
                 let mut nodes = Vec::new();
 
@@ -396,7 +401,7 @@ impl Problem {
         let args = vec![wildcard(); cons_sig.args.len()];
 
         Pattern {
-            location: ByteRange::default(),
+            location: ByteRange::singleton(0, ctx.id),
             data: PatternKind::Constructor(name.to_string(), args),
         }
     }
@@ -554,11 +559,15 @@ impl Problem {
     }
 
     pub fn match_exhaustiveness(self, ctx: &Ctx, case: Case<Pattern>) -> Witness {
-        match (case, &*self.current_type()) {
-            (Case::Wildcard, MonoType::Application(n, args)) => match ctx.lookup_type(n) {
-                Some(sig) => self.exhaustiveness_wildcard(ctx, n, args, sig.clone()),
-                None => self.specialize_wildcard(ctx),
-            },
+        let Type(current, id) = self.current_type();
+        match (case, &*current) {
+            (Case::Wildcard, MonoType::Application(n, args)) => {
+                let ctx = &ctx.get_ctx_by_id(id);
+                match ctx.lookup_type(n) {
+                    Some(sig) => self.exhaustiveness_wildcard(ctx, n, args, sig),
+                    None => self.specialize_wildcard(ctx),
+                }
+            }
 
             (Case::Wildcard, MonoType::Tuple(types)) => {
                 let len = types.len();
@@ -620,6 +629,11 @@ impl Case<Pattern> {
                 .map_or_else(|| Self::Wildcard, |cons| Self::Constructor(cons, vec![])),
             AtomKind::Number(number) => Self::Int(number),
             AtomKind::Tuple(tuple) => Self::Tuple(tuple),
+            AtomKind::PathItem(ref path @ Path(_, ref item)) => ctx
+                .ctx_from_path(path, |ctx| {
+                    Self::from_atom(ctx, AtomKind::Identifier(item.data.clone()))
+                })
+                .expect("ICE: Typechecker should have catched this"),
         }
     }
 }

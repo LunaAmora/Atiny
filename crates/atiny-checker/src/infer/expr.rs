@@ -4,16 +4,16 @@ use super::Infer;
 use crate::check::Check;
 use crate::context::{Ctx, InferError};
 use crate::exhaustive::Problem;
-use crate::types::{MonoType, Type, TypeScheme, TypeSignature};
+use crate::types::{MonoType, Type, TypeScheme, TypeSignature, TypeValue};
 use crate::unify::unify;
 
 use atiny_error::SugestionKind;
+use atiny_location::WithLoc;
 use atiny_tree::elaborated::{self, CaseTree, Stmt, Symbol, VariableNode};
 use atiny_tree::r#abstract::*;
 
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
 
 type Elaborated = elaborated::Expr<Type>;
 
@@ -25,16 +25,17 @@ impl Infer for &Expr {
         use AtomKind::*;
         use ExprKind::*;
         ctx.set_position(self.location);
+        let id = ctx.id;
 
         match &self.data {
             Atom(a) => match a {
                 Wildcard => ctx.new_error("`_` may only appear on patterns".to_string()),
 
-                Number(n) => (MonoType::typ("Int".to_string()), Elaborated::Number(*n)),
+                Number(n) => (Type::typ("Int".to_string(), id), Elaborated::Number(*n)),
 
                 Tuple(vec) => {
                     let (typ, el) = vec.iter().map(|expr| expr.infer(ctx.clone())).unzip();
-                    (MonoType::tuple(typ), Elaborated::Tuple(el))
+                    (Type::tuple(typ, id), Elaborated::Tuple(el))
                 }
 
                 Identifier(x) => match ctx.lookup(x) {
@@ -51,6 +52,14 @@ impl Infer for &Expr {
 
                     None => ctx.new_error(format!("unbound variable '{}'", x)),
                 },
+
+                PathItem(path @ Path(_, item)) => ctx
+                    .ctx_from_path(path, |ctx| {
+                        Atom(Identifier(item.data.clone()))
+                            .with_loc(item)
+                            .infer(ctx.clone())
+                    })
+                    .unwrap_or_else(|| ctx.infer_error()),
             },
 
             Application(fun, arg) => {
@@ -58,7 +67,7 @@ impl Infer for &Expr {
                 let (t1, elab_arg) = arg.infer(ctx.clone());
 
                 let t_ret = ctx.new_hole();
-                let function_type = t1.arrow(t_ret.clone());
+                let function_type = t1.arrow(t_ret.clone(), id);
 
                 unify(ctx, t0, function_type);
 
@@ -88,7 +97,7 @@ impl Infer for &Expr {
                     _ => Elaborated::Abstraction([symbol].into(), Box::new(elab_body)),
                 };
 
-                (t.arrow(t_line), abs)
+                (t.arrow(t_line, id), abs)
             }
 
             Match(e, clauses) => {
@@ -145,7 +154,7 @@ impl Infer for &Expr {
 
                     witness.result().map_or_else(
                         |err| {
-                            let last_pat_loc = ctx.location;
+                            let last_pat_loc = ctx.location.take();
                             ctx.set_position(e.location);
                             ctx.error(format!("non-exhaustive pattern match: {}", err));
 
@@ -170,21 +179,49 @@ impl Infer for &Expr {
 
             RecordCreation(expr, user_fields) => match &expr.data {
                 Atom(AtomKind::Identifier(name)) if ctx.lookup_type(name).is_some() => {
-                    let err_count = ctx.err_count();
-                    ctx.set_position(expr.location);
                     let typ = ctx.lookup_type(name).unwrap();
 
-                    let Some((record, ret_type)) = ctx.inst_sig_as_record(typ, name.to_owned())
+                    let Some((record, ret_type)) =
+                        ctx.inst_sig_as_record(typ.clone(), name.to_owned())
                     else {
+                        ctx.set_position(expr.location);
                         return ctx.new_error(format!("the type '{typ}' is not a record"));
                     };
 
+                    let err_count = ctx.err_count();
                     let elab_fields = user_fields.infer((ctx.clone(), record, true));
 
                     let elaborated = if err_count != ctx.err_count() {
                         Elaborated::Error
                     } else {
                         Elaborated::RecordCreation(Symbol(name.to_owned()), elab_fields)
+                    };
+
+                    (ret_type, elaborated)
+                }
+
+                Atom(AtomKind::PathItem(path @ Path(_, item))) => {
+                    let Some(inst) = ctx.ctx_from_path(path, |ctx| {
+                        ctx.lookup_type(&item.data)
+                            .and_then(|typ| ctx.inst_sig_as_record(typ, item.data.to_owned()))
+                    }) else {
+                        return ctx.infer_error();
+                    };
+
+                    let Some((record, ret_type)) = inst else {
+                        ctx.set_position(item.location);
+                        return ctx.new_error(format!("the type '{item}' is not a record"));
+                    };
+
+                    let err_count = ctx.err_count();
+                    ctx.set_position(expr.location);
+
+                    let elab_fields = user_fields.infer((ctx.clone(), record, true));
+
+                    let elaborated = if err_count != ctx.err_count() {
+                        Elaborated::Error
+                    } else {
+                        Elaborated::RecordCreation(Symbol(item.data.to_owned()), elab_fields)
                     };
 
                     (ret_type, elaborated)
@@ -229,7 +266,7 @@ impl Infer for &Expr {
                     ));
                 };
 
-                unify(ctx.clone(), ret_type, expr_ty);
+                unify(ctx, ret_type, expr_ty);
 
                 let field_ty = TypeScheme {
                     names: record.params.to_vec(),
@@ -304,18 +341,21 @@ impl Infer for &[Statement] {
 }
 
 impl InferError<(Type, Elaborated)> for Ctx {
-    fn new_error(&self, msg: String) -> (Type, Elaborated) {
+    fn error_message(&self, msg: String) {
         self.error(msg);
-        (Rc::new(MonoType::Error), Elaborated::Error)
+    }
+
+    fn infer_error(&self) -> (Type, Elaborated) {
+        (Type::new(MonoType::Error, self.id), Elaborated::Error)
     }
 }
 
 impl Infer for &[ExprField] {
-    type Context<'a> = (Ctx, RecordInfo<'a>, bool);
+    type Context<'a> = (Ctx, RecordInfo, bool);
     type Return = Vec<(Symbol, Elaborated)>;
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let (mut ctx, record, exaustive) = ctx;
+        let (ctx, record, exaustive) = ctx;
 
         let fields_map: HashMap<_, _> = record.fields.iter().map(|(s, t)| (s, t)).collect();
         let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
@@ -363,41 +403,51 @@ impl Infer for &[ExprField] {
     }
 }
 
-pub struct RecordInfo<'a> {
+pub struct RecordInfo {
     id: String,
-    fields: &'a [(String, Type)],
-    params: &'a [String],
+    fields: Vec<(String, Type)>,
+    params: Vec<String>,
     vars: Vec<Type>,
 }
 
 impl Ctx {
-    fn as_record_info(&self, expr_ty: &Type) -> Option<(RecordInfo<'_>, Type)> {
+    fn as_record_info(&self, expr_ty: &Type) -> Option<(RecordInfo, Type)> {
+        let ctx = {
+            if self.id != expr_ty.1 {
+                self.program.update_ctx(self.clone());
+                self.get_ctx_by_id(expr_ty.1)
+            } else {
+                self.clone()
+            }
+        };
+
         expr_ty.get_constructor().and_then(|name| {
-            self.lookup_type(&name)
-                .and_then(|typ| self.inst_sig_as_record(typ, name))
+            ctx.lookup_type(&name)
+                .and_then(|typ| ctx.inst_sig_as_record(typ, name))
         })
     }
 
-    fn inst_sig_as_record<'a>(
-        &'a self,
-        sig: &'a TypeSignature,
-        id: String,
-    ) -> Option<(RecordInfo<'_>, Type)> {
-        sig.get_product().map(|fields| {
-            let (ret_type, vars) = TypeScheme {
-                names: sig.params.clone(),
-                mono: sig.application(),
-            }
-            .instantiate(self.clone());
+    fn inst_sig_as_record(&self, sig: TypeSignature, id: String) -> Option<(RecordInfo, Type)> {
+        let mono = sig.application(self.id);
+        let TypeSignature { params, value, .. } = sig;
 
-            let record = RecordInfo {
-                id,
-                fields,
-                params: sig.params.as_slice(),
-                vars,
-            };
+        let TypeValue::Product(fields) = value else {
+            return None;
+        };
 
-            (record, ret_type)
-        })
+        let (ret_type, vars) = TypeScheme {
+            names: params.clone(),
+            mono,
+        }
+        .instantiate(self.clone());
+
+        let record = RecordInfo {
+            id,
+            fields,
+            params,
+            vars,
+        };
+
+        Some((record, ret_type))
     }
 }

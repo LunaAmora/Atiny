@@ -1,37 +1,90 @@
-use crate::{check::Check, context::Ctx, infer::Infer, types::*};
+use crate::context::Ctx;
+use crate::{check::Check, infer::Infer, types::*};
+use atiny_misc::SeqIter;
+use atiny_parser::atiny_fs::File;
 use atiny_tree::{elaborated::FnBody, r#abstract::*};
 use itertools::Itertools;
+use std::iter::FromIterator;
 use std::{collections::HashSet, iter, rc::Rc};
 
-impl Ctx {
-    pub fn extend_type_sigs(&mut self, iter: impl IntoIterator<Item = TypeDecl>) {
-        iter.into_iter()
-            .map(|type_decl| type_decl.infer(self))
-            .collect_vec()
-            .into_iter()
-            .for_each(|constr| constr.infer(self));
-    }
-
-    pub fn extend_fun_sigs(&mut self, iter: impl IntoIterator<Item = FnDecl>) -> Vec<FnBody<Type>> {
-        iter.into_iter()
-            .map(|fun_decl| fun_decl.infer(self))
-            .collect_vec()
-            .into_iter()
-            .map(|body| body.infer(self))
-            .collect()
-    }
-}
+use super::module::ModuleMap;
 
 impl Infer for Vec<TopLevel> {
     type Context<'a> = &'a mut Ctx;
-    type Return = Vec<FnBody<Type>>;
+    type Return = ModuleMap;
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let mut fn_vec = Vec::new();
-        let top_iter = TopIter::new(self, &mut fn_vec);
+        let mut top_levels = SeqIter::new(self);
 
-        ctx.extend_type_sigs(top_iter);
-        ctx.extend_fun_sigs(fn_vec)
+        let cons = ctx.infer_all(top_levels.as_iter::<TypeDecl>());
+        let mut module_map = ctx.resolve_imports(&mut top_levels);
+        let bodies = ctx.infer_all(top_levels.as_iter::<FnDecl>());
+
+        module_map.push((ctx.id, (cons, bodies)));
+        module_map
+    }
+}
+
+impl Ctx {
+    pub fn resolve_imports(&mut self, iter: impl IntoIterator<Item = UseDecl>) -> ModuleMap {
+        let mut infered = ModuleMap::default();
+
+        for UseDecl(quali, item) in iter.into_iter() {
+            let Some(file) = self.get_file_from_qualifier(&quali) else {
+                continue;
+            };
+
+            let loc = item
+                .as_ref()
+                .map(|item| item.location)
+                .unwrap_or_else(|| quali.location().unwrap());
+
+            self.set_position(loc);
+
+            self.program.update_ctx(self.clone());
+            self.program
+                .clone()
+                .get_module(file, |ctx, parsed: Option<Vec<_>>| {
+                    if let Some(ModuleMap(module)) = parsed.infer(ctx) {
+                        infered.extend(module);
+                    }
+
+                    self.register_imports(ctx, item.clone());
+                });
+        }
+
+        infered
+    }
+
+    pub fn get_file_from_qualifier(&self, qualifier: &Qualifier) -> Option<File> {
+        if qualifier.is_empty() {
+            todo!("ICE: Empty qualifier")
+        }
+
+        {
+            let mut prog = self.program.borrow_mut();
+            let path = qualifier.0.iter().join(".");
+
+            if let Ok(file) = prog.file_system.get_file_relative(&path, self.id) {
+                return Some(file);
+            }
+        }
+
+        let loc = qualifier
+            .location()
+            .expect("ICE: impossible to have an empty qualifier here");
+
+        self.set_position(loc);
+        self.error(format!("could not find module '{}'", qualifier));
+        None
+    }
+
+    pub fn infer_all<T, O>(&mut self, iter: impl IntoIterator<Item = T>) -> O
+    where
+        T: for<'a> Infer<Context<'a> = &'a mut Self>,
+        O: FromIterator<T::Return>,
+    {
+        iter.into_iter().map(|item| item.infer(self)).collect()
     }
 }
 
@@ -40,15 +93,19 @@ impl Infer for TypeDecl {
     type Return = (String, TypeDeclKind);
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let value = match self.constructors {
-            TypeDeclKind::Sum(_) => TypeValue::Sum(Vec::new()),
-            TypeDeclKind::Product(_) => TypeValue::Product(Vec::new()),
+        let (value, names) = match self.constructors {
+            TypeDeclKind::Sum(ref cons) => (
+                TypeValue::Sum(Vec::new()),
+                cons.iter().map(|c| c.name.clone()).collect(),
+            ),
+            TypeDeclKind::Product(_) => (TypeValue::Product(Vec::new()), Vec::new()),
         };
 
         let type_sig = TypeSignature {
             name: self.name.clone(),
-            params: self.params.clone(),
+            params: self.params,
             value,
+            names,
         };
 
         ctx.signatures.types.insert(self.name.clone(), type_sig);
@@ -79,7 +136,7 @@ impl Infer for (&str, Field) {
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (decl_name, field) = self;
 
-        let Some(TypeSignature { params, .. }) = &ctx.signatures.types.get(decl_name) else {
+        let Some(TypeSignature { params, .. }) = &ctx.lookup_type(decl_name) else {
             panic!("The String should be a valid type signature name on the Ctx");
         };
 
@@ -107,15 +164,19 @@ impl Infer for (&str, Constructor) {
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (decl_name, constr) = self;
+        let id = ctx.id;
 
-        let Some(TypeSignature { params, .. }) = &ctx.signatures.types.get(decl_name) else {
+        let Some(TypeSignature { params, .. }) = &ctx.lookup_type(decl_name) else {
             panic!("The String should be a valid type signature name on the Ctx");
         };
 
-        let application = Rc::new(MonoType::Application(
-            decl_name.to_string(),
-            params.iter().cloned().map(MonoType::var).collect(),
-        ));
+        let application = Type::new(
+            MonoType::Application(
+                decl_name.to_string(),
+                params.iter().cloned().map(|t| Type::var(t, id)).collect(),
+            ),
+            id,
+        );
 
         let new_ctx = ctx.extend_types(params);
 
@@ -128,7 +189,7 @@ impl Infer for (&str, Constructor) {
         let value = Rc::new(ConstructorSignature::new(
             constr.name.clone(),
             params.clone(),
-            MonoType::rfold_arrow(args.iter().cloned(), application),
+            Type::rfold_arrow(args.iter().cloned(), application, id),
             args,
         ));
 
@@ -167,7 +228,7 @@ impl Infer for FnDecl {
 
         let entire_type = TypeScheme::new(
             set.into_iter().collect(),
-            MonoType::rfold_arrow(args.iter().map(|(_, ty)| ty.clone()), ret),
+            Type::rfold_arrow(args.iter().map(|(_, ty)| ty.clone()), ret, ctx.id),
         );
 
         let sig = DeclSignature::Function(FunctionSignature {
@@ -183,7 +244,7 @@ impl Infer for FnDecl {
 }
 
 impl Infer for (String, Expr) {
-    type Context<'a> = &'a Ctx;
+    type Context<'a> = &'a mut Ctx;
     type Return = FnBody<Type>;
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
@@ -201,7 +262,7 @@ impl Infer for (String, Expr) {
             if let Err(err) = witness.result() {
                 new_ctx.set_position(arg_pat.location);
                 new_ctx.error(format!(
-                    "refutable pattern in function argument. pattern `{}` not covered",
+                    "refutable pattern in function argument. pattern '{}' not covered",
                     err
                 ));
             };
@@ -239,34 +300,7 @@ impl Ctx {
                     self.free_variables(arg, set);
                 }
             }
-        }
-    }
-}
-
-struct TopIter<'a> {
-    vec: Vec<TopLevel>,
-    fn_vec: &'a mut Vec<FnDecl>,
-}
-
-impl<'a> TopIter<'a> {
-    fn new(vec: Vec<TopLevel>, fn_vec: &'a mut Vec<FnDecl>) -> Self {
-        Self { vec, fn_vec }
-    }
-}
-
-impl<'a> Iterator for TopIter<'a> {
-    type Item = TypeDecl;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.vec.pop() {
-            Some(top) => match top.data {
-                TopLevelKind::TypeDecl(typ) => Some(typ),
-                TopLevelKind::FnDecl(fnd) => {
-                    self.fn_vec.push(fnd);
-                    self.next()
-                }
-            },
-            None => None,
+            TypeKind::Path(_) => {}
         }
     }
 }

@@ -6,6 +6,9 @@
 use core::fmt;
 use std::fmt::Display;
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub struct NodeId(pub usize);
+
 /// Byte position in a source file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Byte(pub usize);
@@ -30,15 +33,15 @@ impl Byte {
 
 /// Two byte positions inside a source file.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-pub struct ByteRange(pub Byte, pub Byte);
+pub struct ByteRange(pub Byte, pub Byte, pub NodeId);
 
 impl ByteRange {
     pub fn locate(&self, code: &str) -> Range {
         Range(self.0.locate(code), self.1.locate(code))
     }
 
-    pub fn singleton(byte: usize) -> Self {
-        Self(Byte(byte), Byte(byte))
+    pub fn singleton(byte: usize, id: NodeId) -> Self {
+        Self(Byte(byte), Byte(byte), id)
     }
 }
 
@@ -125,3 +128,14 @@ impl<T> Located<T> {
         }
     }
 }
+
+pub trait WithLoc: Sized {
+    fn with_loc<Any>(self, located: &Located<Any>) -> Located<Self> {
+        Located {
+            location: located.location,
+            data: self,
+        }
+    }
+}
+
+impl<T: Sized> WithLoc for T {}

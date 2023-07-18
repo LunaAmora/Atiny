@@ -8,6 +8,8 @@ members = [
     "crates/atiny-tree",
     "crates/atiny-location",
     "crates/atiny-tests",
+    "crates/atiny-misc",
+    "crates/atiny-fs",
 ]
 
 [workspace.lints.clippy]
