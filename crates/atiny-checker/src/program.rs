@@ -1,6 +1,6 @@
 use std::io;
 use std::mem::take;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::{cell::RefCell, collections::HashMap, fs::read_to_string, path::PathBuf, rc::Rc};
 
 use atiny_error::Error;
@@ -10,8 +10,30 @@ use atiny_parser::{Parser, Parsers};
 use atiny_tree::elaborated::FnBody;
 
 use crate::context::Ctx;
-use crate::infer::Infer;
 use crate::types::Type;
+
+pub struct CtxGuard(Option<Ctx>, Program);
+
+impl Deref for CtxGuard {
+    type Target = Ctx;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref().unwrap()
+    }
+}
+
+impl DerefMut for CtxGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0.as_mut().unwrap()
+    }
+}
+
+impl Drop for CtxGuard {
+    fn drop(&mut self) {
+        let Self(ctx, prog) = self;
+        prog.update_ctx(std::mem::take(ctx).unwrap());
+    }
+}
 
 #[derive(Clone)]
 pub struct Program(Rc<RefCell<Prog>>);
@@ -46,9 +68,19 @@ impl Program {
         self.borrow_mut().take_errors()
     }
 
-    pub fn return_ctx(&self, ctx: Ctx) {
+    pub fn update_ctx(&self, ctx: Ctx) {
         let prog = &mut self.borrow_mut();
         prog.modules.insert(ctx.id, Some(ctx));
+    }
+
+    pub fn get_ctx(&self, id: NodeId) -> Option<Ctx> {
+        let prog = &mut self.borrow();
+        prog.get_ctx(id)
+    }
+
+    pub fn get_ctx_mut(&self, id: NodeId) -> Option<CtxGuard> {
+        self.get_ctx(id)
+            .map(|ctx| CtxGuard(Some(ctx), self.clone()))
     }
 
     pub fn get_entry<Out, R>(&self, f: impl FnMut(&mut Ctx, Option<Out>) -> R) -> R
@@ -64,48 +96,31 @@ impl Program {
         Parsers: Parser<Out>,
     {
         let (mut ctx, parsed) = self.take_or_parse(file);
-        let result = f(&mut ctx, parsed);
-        self.return_ctx(ctx);
-        result
+        f(&mut ctx, parsed)
     }
 
-    pub fn get_infered_module<Out, R>(&self, file: File, mut f: impl FnMut(&mut Ctx) -> R) -> R
-    where
-        Parsers: Parser<Out>,
-        Out: for<'a> Infer<Context<'a> = &'a mut Ctx>,
-        Out::Return: for<'a> Infer<Context<'a> = Self>,
-    {
-        let id = file.id;
-        let (mut ctx, parsed) = self.take_or_parse(file);
-
-        let module = parsed.infer(&mut ctx);
-        self.return_ctx(ctx);
-        let _ = module.infer(self.clone());
-
-        let mut ctx = { self.borrow_mut().take_ctx(id).unwrap() };
-
-        let result = f(&mut ctx);
-        self.return_ctx(ctx);
-        result
+    pub fn get_infered_module<R>(&self, id: NodeId, f: impl FnMut(&mut Ctx) -> R) -> Option<R> {
+        self.get_ctx_mut(id).as_deref_mut().map(f)
     }
 
-    fn take_or_parse<Out>(&self, file: File) -> (Ctx, Option<Out>)
+    fn take_or_parse<Out>(&self, file: File) -> (CtxGuard, Option<Out>)
     where
         Parsers: Parser<Out>,
     {
-        if let Some(ctx) = { self.borrow_mut().take_ctx(file.id) } {
+        if let Some(ctx) = self.get_ctx_mut(file.id) {
             return (ctx, None);
         }
 
         self.parse_file_as_ctx(file)
     }
 
-    fn parse_file_as_ctx<Out>(&self, file: File) -> (Ctx, Option<Out>)
+    fn parse_file_as_ctx<Out>(&self, file: File) -> (CtxGuard, Option<Out>)
     where
         Parsers: Parser<Out>,
     {
         let parsed = { self.borrow_mut().parse_file(&file) };
         let ctx = Ctx::new(file.id, self.clone());
+        self.update_ctx(ctx);
 
         let top = parsed.map_or_else(
             |err| {
@@ -115,17 +130,17 @@ impl Program {
             Some,
         );
 
-        (ctx, top)
+        (self.get_ctx_mut(file.id).unwrap(), top)
     }
 }
 
 pub struct Prog {
     pub file_system: Box<dyn VirtualFileSystem<PathBuf, io::Error>>,
-    pub entry_point: NodeId,
-    pub modules: HashMap<NodeId, Option<Ctx>>,
     pub elaborated: HashMap<NodeId, Vec<FnBody<Type>>>,
     pub errors: Vec<Error>,
-    pub parser: Parsers,
+    entry_point: NodeId,
+    modules: HashMap<NodeId, Option<Ctx>>,
+    parser: Parsers,
 }
 
 impl Prog {
@@ -133,12 +148,10 @@ impl Prog {
         self.file_system.get_file(self.entry_point).unwrap()
     }
 
-    pub fn take_ctx(&mut self, id: NodeId) -> Option<Ctx> {
-        match self.modules.get_mut(&id) {
-            Some(None) => panic!("ICE: context was already taken"),
-            Some(ctx) => take(ctx),
-            None => None,
-        }
+    fn get_ctx(&self, id: NodeId) -> Option<Ctx> {
+        self.modules
+            .get(&id)
+            .map_or_else(|| None, |ctx| ctx.clone())
     }
 
     fn parse_file<Out>(&mut self, file: &File) -> Result<Out, Error>

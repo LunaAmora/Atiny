@@ -53,18 +53,13 @@ impl Infer for &Expr {
                     None => ctx.new_error(format!("unbound variable '{}'", x)),
                 },
 
-                PathItem(Path(q, item)) => {
-                    let file = ctx.get_file_from_qualifier(q.clone());
-                    ctx.program.return_ctx(ctx.clone());
-
-                    ctx.program
-                        .clone()
-                        .get_infered_module::<Vec<_>, _>(file, |ctx| {
-                            Atom(Identifier(item.data.clone()))
-                                .with_loc(item)
-                                .infer(ctx.clone())
-                        })
-                }
+                PathItem(path @ Path(_, item)) => ctx
+                    .ctx_from_path(path, |ctx| {
+                        Atom(Identifier(item.data.clone()))
+                            .with_loc(item)
+                            .infer(ctx.clone())
+                    })
+                    .unwrap_or_else(|| ctx.infer_error()),
             },
 
             Application(fun, arg) => {
@@ -159,7 +154,7 @@ impl Infer for &Expr {
 
                     witness.result().map_or_else(
                         |err| {
-                            let last_pat_loc = ctx.location;
+                            let last_pat_loc = ctx.location.take();
                             ctx.set_position(e.location);
                             ctx.error(format!("non-exhaustive pattern match: {}", err));
 
@@ -205,17 +200,13 @@ impl Infer for &Expr {
                     (ret_type, elaborated)
                 }
 
-                Atom(AtomKind::PathItem(Path(q, item))) => {
-                    let file = ctx.get_file_from_qualifier(q.clone());
-                    ctx.program.return_ctx(ctx.clone());
-
-                    let inst = ctx
-                        .program
-                        .clone()
-                        .get_infered_module::<Vec<_>, _>(file, |ctx| {
-                            let typ = ctx.lookup_type(&item.data).unwrap();
-                            ctx.inst_sig_as_record(typ, item.data.to_owned())
-                        });
+                Atom(AtomKind::PathItem(path @ Path(_, item))) => {
+                    let Some(inst) = ctx.ctx_from_path(path, |ctx| {
+                        ctx.lookup_type(&item.data)
+                            .and_then(|typ| ctx.inst_sig_as_record(typ, item.data.to_owned()))
+                    }) else {
+                        return ctx.infer_error();
+                    };
 
                     let Some((record, ret_type)) = inst else {
                         ctx.set_position(item.location);
@@ -275,7 +266,7 @@ impl Infer for &Expr {
                     ));
                 };
 
-                unify(ctx.clone(), ret_type, expr_ty);
+                unify(ctx, ret_type, expr_ty);
 
                 let field_ty = TypeScheme {
                     names: record.params.to_vec(),
@@ -350,8 +341,11 @@ impl Infer for &[Statement] {
 }
 
 impl InferError<(Type, Elaborated)> for Ctx {
-    fn new_error(&self, msg: String) -> (Type, Elaborated) {
+    fn error_message(&self, msg: String) {
         self.error(msg);
+    }
+
+    fn infer_error(&self) -> (Type, Elaborated) {
         (Type::new(MonoType::Error, self.id), Elaborated::Error)
     }
 }
@@ -361,7 +355,7 @@ impl Infer for &[ExprField] {
     type Return = Vec<(Symbol, Elaborated)>;
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let (mut ctx, record, exaustive) = ctx;
+        let (ctx, record, exaustive) = ctx;
 
         let fields_map: HashMap<_, _> = record.fields.iter().map(|(s, t)| (s, t)).collect();
         let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
@@ -420,8 +414,8 @@ impl Ctx {
     fn as_record_info(&self, expr_ty: &Type) -> Option<(RecordInfo, Type)> {
         let ctx = {
             if self.id != expr_ty.1 {
-                self.program.return_ctx(self.clone());
-                self.get_ctx_by_id(&expr_ty.1)
+                self.program.update_ctx(self.clone());
+                self.get_ctx_by_id(expr_ty.1)
             } else {
                 self.clone()
             }

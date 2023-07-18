@@ -5,6 +5,7 @@ use atiny_location::*;
 
 grammar(id: NodeId);
 
+#[inline]
 Loc<T>: Located<T> = {
     <s: @L> <data: T> <e: @R> => Located { data, location: ByteRange(Byte(s), Byte(e), id) }
 }
@@ -161,9 +162,13 @@ ExprField: ExprField = <name: LowerId> "=" <expr: Expr> => ExprField {<>};
 
 // For Types
 
+TypePath: Path = {
+    <a:(<Loc<UpperId>> "::")+> <b:Loc<UpperId>> => Path(Qualifier(a), b)
+}
+
 TypeAtomItem: TypeKind = {
     <name: Id> => TypeKind::Variable(VariableNode {<>}),
-    <a:(<Loc<UpperId>> "::")+> <b:Loc<UpperId>> => TypeKind::Path(Path(Qualifier(a), b)),
+    TypePath => TypeKind::Path(<>),
     "(" <mut sep:Sep<",", TypeNode>> ")" => {
         let (mut types, trailing) = sep;
 
@@ -178,7 +183,15 @@ TypeAtomItem: TypeKind = {
 TypeAtom: TypeNode = Loc<TypeAtomItem>;
 
 TypeCallItem: TypeKind = {
-    <fun:UpperId> <args:TypeAtom+> => TypeKind::Application(TypeApplicationNode {<>}),
+    <fun:Loc<UpperId>> <args:TypeAtom+> => TypeKind::Application(TypeApplicationNode {
+        fun: Path(Qualifier(Vec::new()), fun),
+        args
+    }),
+
+    <fun:TypePath> <args:TypeAtom+> => TypeKind::Application(TypeApplicationNode {
+        fun,
+        args
+    })
 }
 
 TypeCall: TypeNode = {

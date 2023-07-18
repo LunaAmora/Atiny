@@ -29,9 +29,18 @@ impl Ctx {
         let mut infered = ModuleMap::default();
 
         for UseDecl(quali, item) in iter.into_iter() {
-            let file = self.get_file_from_qualifier(quali);
-            self.program.return_ctx(self.clone());
+            let Some(file) = self.get_file_from_qualifier(&quali) else {
+                continue;
+            };
 
+            let loc = item
+                .as_ref()
+                .map(|item| item.location)
+                .unwrap_or_else(|| quali.location().unwrap());
+
+            self.set_position(loc);
+
+            self.program.update_ctx(self.clone());
             self.program
                 .clone()
                 .get_module(file, |ctx, parsed: Option<Vec<_>>| {
@@ -46,13 +55,27 @@ impl Ctx {
         infered
     }
 
-    pub fn get_file_from_qualifier(&self, quali: Qualifier) -> File {
-        let mut prog = self.program.borrow_mut();
-        let path = quali.0.into_iter().join(".");
+    pub fn get_file_from_qualifier(&self, qualifier: &Qualifier) -> Option<File> {
+        if qualifier.is_empty() {
+            todo!("ICE: Empty qualifier")
+        }
 
-        prog.file_system
-            .get_file_relative(&path, self.id)
-            .expect("IO Error")
+        {
+            let mut prog = self.program.borrow_mut();
+            let path = qualifier.0.iter().join(".");
+
+            if let Ok(file) = prog.file_system.get_file_relative(&path, self.id) {
+                return Some(file);
+            }
+        }
+
+        let loc = qualifier
+            .location()
+            .expect("ICE: impossible to have an empty qualifier here");
+
+        self.set_position(loc);
+        self.error(format!("could not find module '{}'", qualifier));
+        None
     }
 
     pub fn infer_all<T, O>(&mut self, iter: impl IntoIterator<Item = T>) -> O
@@ -238,7 +261,7 @@ impl Infer for (String, Expr) {
             if let Err(err) = witness.result() {
                 new_ctx.set_position(arg_pat.location);
                 new_ctx.error(format!(
-                    "refutable pattern in function argument. pattern `{}` not covered",
+                    "refutable pattern in function argument. pattern '{}' not covered",
                     err
                 ));
             };

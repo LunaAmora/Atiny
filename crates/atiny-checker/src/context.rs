@@ -5,7 +5,7 @@ use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use atiny_error::{Error, Message, SugestionKind};
 use atiny_location::{ByteRange, Located, NodeId};
-use atiny_tree::r#abstract::TypeDecl;
+use atiny_tree::r#abstract::{Path, TypeDecl};
 use itertools::Itertools;
 
 use crate::{infer::Infer, program::Program};
@@ -33,6 +33,16 @@ pub enum Imports {
     Items(Vec<String>),
 }
 
+impl Display for Imports {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Star => write!(f, "*"),
+            Self::Module => write!(f, "Module"),
+            Self::Items(_) => write!(f, "Items(...)"),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Ctx {
     pub id: NodeId,
@@ -41,7 +51,7 @@ pub struct Ctx {
     counter: Rc<RefCell<usize>>,
     pub map: im_rc::OrdMap<String, Rc<TypeScheme>>,
     pub typ_map: im_rc::OrdSet<String>,
-    pub location: ByteRange,
+    pub location: RefCell<ByteRange>,
     pub level: usize,
     pub signatures: Signatures,
 }
@@ -121,8 +131,8 @@ impl Ctx {
     }
 
     /// Sets the current location that we are type checking inside of the context.
-    pub fn set_position(&mut self, location: ByteRange) {
-        self.location = location;
+    pub fn set_position(&self, location: ByteRange) {
+        *self.location.borrow_mut() = location;
     }
 
     /// Creates a new name for a type variable.
@@ -170,7 +180,7 @@ impl Ctx {
     }
 
     fn lookup_on_imports<T>(&self, name: &str, lookup: impl Fn(&Self) -> Option<T>) -> Option<T> {
-        for (id, import) in self.imports.borrow().iter() {
+        for (&id, import) in self.imports.borrow().iter() {
             match import {
                 Imports::Items(items) => {
                     if items.iter().any(|i| name.eq(i.as_str())) {
@@ -187,35 +197,83 @@ impl Ctx {
         None
     }
 
-    pub fn get_ctx_by_id(&self, id: &NodeId) -> Self {
-        if id == &self.id {
+    pub fn get_ctx_by_id(&self, id: NodeId) -> Self {
+        if id == self.id {
             return self.clone();
         }
 
-        self.program.borrow().modules[id]
-            .clone()
+        self.program
+            .get_ctx(id)
             .expect("ICE: context was not stored in the program")
     }
 
+    pub fn ctx_from_path<R>(&self, path: &Path, f: impl FnMut(&mut Self) -> R) -> Option<R> {
+        let Path(qualifier, item) = path;
+
+        let Some(file) = self.get_file_from_qualifier(qualifier) else {
+            return None;
+        };
+
+        match self.imports.borrow().get(&file.id) {
+            Some(imports) => match imports {
+                Imports::Items(i) if !i.contains(&item.data) => {
+                    self.set_position(item.location);
+                    self.error(format!(
+                        "Module '{}' is not imported. Import it or the item '{}' directly",
+                        qualifier, item.data
+                    ));
+                    None
+                }
+
+                imports => {
+                    if matches!(imports, Imports::Star) {
+                        //todo: Accept, but Lint that the use of a path is unecessary
+                    }
+
+                    self.program.update_ctx(self.clone());
+                    self.program.get_infered_module(file.id, f)
+                }
+            },
+
+            None => {
+                self.set_position(qualifier.location().unwrap());
+                self.error(format!("Invalid Path: {}", qualifier));
+                None
+            }
+        }
+    }
+
+    pub fn path_map<R>(
+        &mut self,
+        path: &Path,
+        mut f: impl FnMut(&mut Self) -> Option<R>,
+    ) -> Option<R> {
+        if path.0.is_empty() {
+            f(self)
+        } else {
+            self.ctx_from_path(path, f).flatten()
+        }
+    }
+
     pub fn error(&self, msg: String) {
-        self.program
-            .borrow_mut()
-            .errors
-            .push(Error::new(Message::Single(msg), self.location));
+        self.program.borrow_mut().errors.push(Error::new(
+            Message::Single(msg),
+            self.location.borrow().to_owned(),
+        ));
     }
 
     pub fn errors(&self, msg: Vec<String>) {
-        self.program
-            .borrow_mut()
-            .errors
-            .push(Error::new(Message::Multi(msg), self.location));
+        self.program.borrow_mut().errors.push(Error::new(
+            Message::Multi(msg),
+            self.location.borrow().to_owned(),
+        ));
     }
 
     pub fn suggestion(&self, msg: String, sugestion_kind: SugestionKind) {
         self.program.borrow_mut().errors.push(Error::new_sugestion(
             Message::Single(msg),
             sugestion_kind,
-            self.location,
+            self.location.borrow().to_owned(),
         ));
     }
 
@@ -223,7 +281,7 @@ impl Ctx {
         self.program.borrow_mut().errors.push(Error::new_sugestion(
             Message::Multi(msg),
             sugestion_kind,
-            self.location,
+            self.location.borrow().to_owned(),
         ));
     }
 
@@ -231,7 +289,7 @@ impl Ctx {
         self.program
             .borrow_mut()
             .errors
-            .push(Error::new_dyn(msg, self.location));
+            .push(Error::new_dyn(msg, self.location.borrow().to_owned()));
     }
 
     pub fn err_count(&self) -> usize {
@@ -262,7 +320,7 @@ impl Ctx {
 
                     None => {
                         self.set_position(item.location);
-                        self.error(format!("could not find Type `{}` import", item));
+                        self.error(format!("could not find Type '{}' import", item));
                         return;
                     }
                 }
@@ -276,22 +334,25 @@ impl Ctx {
         self.update_imports(ctx.id, imports);
     }
 
-    pub fn update_imports(&self, id: NodeId, update: Imports) {
+    pub fn update_imports(&mut self, id: NodeId, new: Imports) {
         let mut imports = self.imports.borrow_mut();
         use Imports::*;
 
         match imports.get_mut(&id) {
-            None => _ = imports.insert(id, update),
+            None => _ = imports.insert(id, new),
 
-            Some(current) => match (current, update) {
+            Some(old) => match (old, new) {
                 (Star, Star) => {}
                 (Star, Items(_)) => {}
                 (Module, Module) => {}
 
-                (Star, Module) => todo!(),
-                (Module, Star) => todo!(),
-                (Module, Items(_)) => todo!(),
-                (Items(_), Module) => todo!(),
+                (old @ Star, new @ Module)
+                | (old @ Module, new @ Star)
+                | (old @ Module, new @ Items(_))
+                | (old @ Items(_), new @ Module) => self.error(format!(
+                    "can not import as '{}' the same module that was already imported as '{}'",
+                    new, old
+                )),
 
                 (Items(_), Star) => _ = imports.insert(id, Star),
                 (Items(ref mut items), Items(names)) => items.extend(names),
@@ -301,12 +362,21 @@ impl Ctx {
 }
 
 pub trait InferError<T> {
-    fn new_error(&self, msg: String) -> T;
+    fn new_error(&self, msg: String) -> T {
+        self.error_message(msg);
+        self.infer_error()
+    }
+
+    fn error_message(&self, msg: String);
+    fn infer_error(&self) -> T;
 }
 
 impl InferError<Type> for Ctx {
-    fn new_error(&self, msg: String) -> Type {
+    fn error_message(&self, msg: String) {
         self.error(msg);
+    }
+
+    fn infer_error(&self) -> Type {
         Type::new(MonoType::Error, self.id)
     }
 }

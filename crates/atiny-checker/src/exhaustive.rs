@@ -201,15 +201,11 @@ impl Matrix {
         match pat {
             PatternKind::Constructor(name, _) => Some(name.clone()),
             PatternKind::Atom(AtomKind::Identifier(id)) => ctx.lookup_cons(id).map(|_| id.clone()),
-            PatternKind::Atom(AtomKind::PathItem(Path(q, item))) => {
-                let file = ctx.get_file_from_qualifier(q.clone());
-                ctx.program.return_ctx(ctx.clone());
-                ctx.program
-                    .clone()
-                    .get_infered_module::<Vec<_>, _>(file, |ctx| {
-                        ctx.lookup_cons(&item.data).map(|_| item.data.clone())
-                    })
-            }
+            PatternKind::Atom(AtomKind::PathItem(path @ Path(_, item))) => ctx
+                .ctx_from_path(path, |ctx| {
+                    ctx.lookup_cons(&item.data).map(|_| item.data.clone())
+                })
+                .expect("ICE: Typechecker should have catched this"),
             _ => None,
         }
     }
@@ -566,7 +562,7 @@ impl Problem {
         let Type(current, id) = self.current_type();
         match (case, &*current) {
             (Case::Wildcard, MonoType::Application(n, args)) => {
-                let ctx = &ctx.get_ctx_by_id(&id);
+                let ctx = &ctx.get_ctx_by_id(id);
                 match ctx.lookup_type(n) {
                     Some(sig) => self.exhaustiveness_wildcard(ctx, n, args, sig),
                     None => self.specialize_wildcard(ctx),
@@ -633,15 +629,11 @@ impl Case<Pattern> {
                 .map_or_else(|| Self::Wildcard, |cons| Self::Constructor(cons, vec![])),
             AtomKind::Number(number) => Self::Int(number),
             AtomKind::Tuple(tuple) => Self::Tuple(tuple),
-            AtomKind::PathItem(Path(q, item)) => {
-                let file = ctx.get_file_from_qualifier(q);
-                ctx.program.return_ctx(ctx.clone());
-                ctx.program
-                    .clone()
-                    .get_infered_module::<Vec<_>, _>(file, |ctx| {
-                        Self::from_atom(ctx, AtomKind::Identifier(item.data.clone()))
-                    })
-            }
+            AtomKind::PathItem(ref path @ Path(_, ref item)) => ctx
+                .ctx_from_path(path, |ctx| {
+                    Self::from_atom(ctx, AtomKind::Identifier(item.data.clone()))
+                })
+                .expect("ICE: Typechecker should have catched this"),
         }
     }
 }

@@ -13,6 +13,27 @@ use crate::SeqHelper;
 #[derive(Debug, Clone)]
 pub struct Qualifier(pub Vec<Located<String>>);
 
+impl Qualifier {
+    pub fn location(&self) -> Option<ByteRange> {
+        let first = self.0.first();
+        let last = self.0.last();
+
+        if let Some((start, end)) = first.zip(last) {
+            Some(ByteRange(
+                start.location.0,
+                end.location.1,
+                start.location.2,
+            ))
+        } else {
+            None
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 impl Display for Qualifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0.iter().join("::"))
@@ -238,7 +259,11 @@ pub struct Path(pub Qualifier, pub Located<String>);
 impl Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self(q, s) = self;
-        write!(f, "{q}::{s}")
+        if q.is_empty() {
+            write!(f, "{s}")
+        } else {
+            write!(f, "{q}::{s}")
+        }
     }
 }
 
@@ -269,7 +294,7 @@ impl Display for ForallNode {
 
 #[derive(Debug)]
 pub struct TypeApplicationNode {
-    pub fun: String,
+    pub fun: Path,
     pub args: Vec<TypeNode>,
 }
 
@@ -452,10 +477,17 @@ pub struct UseDecl(pub Qualifier, pub Option<Located<String>>);
 
 impl Display for UseDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)?;
-        if let Some(a) = &self.1 {
-            write!(f, "::{}", a)?;
+        let Self(q, s) = self;
+        write!(f, "{}", q)?;
+
+        if let Some(a) = &s {
+            if !q.is_empty() {
+                write!(f, "::")?;
+            }
+
+            write!(f, "{}", a)?;
         }
+
         Ok(())
     }
 }

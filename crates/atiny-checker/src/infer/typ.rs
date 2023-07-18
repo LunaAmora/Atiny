@@ -4,7 +4,7 @@ use super::Infer;
 use crate::{context::*, types::*};
 
 use atiny_location::WithLoc;
-use atiny_tree::r#abstract::{Path, TypeKind, TypeNode, VariableNode};
+use atiny_tree::r#abstract::{Path, TypeApplicationNode, TypeKind, TypeNode, VariableNode};
 
 impl Infer for &TypeNode {
     type Context<'a> = Ctx;
@@ -52,37 +52,36 @@ impl Infer for &TypeNode {
                 .0
             }
 
-            TypeKind::Application(app) => match ctx.lookup_type(&app.fun) {
-                Some(sig) if sig.params.len() == app.args.len() => Type::new(
-                    MonoType::Application(
-                        sig.name,
-                        app.args.iter().map(|typ| typ.infer(ctx.clone())).collect(),
+            TypeKind::Application(TypeApplicationNode { fun, args }) => {
+                let Path(_, item) = fun;
+                match ctx.path_map(fun, |ctx| ctx.lookup_type(&item.data)) {
+                    Some(sig) if sig.params.len() == args.len() => Type::new(
+                        MonoType::Application(
+                            sig.name,
+                            args.iter().map(|typ| typ.infer(ctx.clone())).collect(),
+                        ),
+                        ctx.id,
                     ),
-                    ctx.id,
-                ),
 
-                Some(sig) => ctx.new_error(format!(
-                    "expected {} arguments but got {} in type",
-                    sig.params.len(),
-                    app.args.len()
-                )),
+                    Some(sig) => ctx.new_error(format!(
+                        "expected {} arguments but got {} in type",
+                        sig.params.len(),
+                        args.len()
+                    )),
 
-                None => ctx.new_error(format!("unbound variable '{}'", app.fun)),
-            },
-
-            TypeKind::Path(Path(q, item)) => {
-                let file = ctx.get_file_from_qualifier(q.clone());
-                ctx.program.return_ctx(ctx.clone());
-                ctx.program
-                    .clone()
-                    .get_infered_module::<Vec<_>, _>(file, |ctx| {
-                        TypeKind::Variable(VariableNode {
-                            name: item.data.clone(),
-                        })
-                        .with_loc(item)
-                        .infer(ctx.clone())
-                    })
+                    None => ctx.new_error(format!("unbound variable '{}'", fun)),
+                }
             }
+
+            TypeKind::Path(path @ Path(_, item)) => ctx
+                .ctx_from_path(path, |ctx| {
+                    TypeKind::Variable(VariableNode {
+                        name: item.data.clone(),
+                    })
+                    .with_loc(item)
+                    .infer(ctx.clone())
+                })
+                .unwrap_or_else(|| ctx.infer_error()),
         }
     }
 }

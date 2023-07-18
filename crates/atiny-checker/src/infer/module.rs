@@ -32,27 +32,16 @@ impl Infer for ModuleMap {
         for (id, (type_bodies, fn_bodies)) in self.0 {
             bodies.push((id, fn_bodies));
 
-            let mut ctx = {
-                let mut prog = program.borrow_mut();
-                prog.take_ctx(id).unwrap()
-            };
-
+            let mut ctx = program.get_ctx_mut(id).unwrap();
             let _: () = ctx.infer_all(type_bodies);
-
-            program.return_ctx(ctx);
         }
 
         for (id, fn_bodies) in bodies {
-            let mut ctx = {
-                let mut prog = program.borrow_mut();
-                prog.take_ctx(id).unwrap()
-            };
-
+            let mut ctx = program.get_ctx_mut(id).unwrap();
             let bodies = ctx.infer_all(fn_bodies);
 
             let mut prog = program.borrow_mut();
             prog.elaborated.insert(ctx.id, bodies);
-            prog.modules.insert(ctx.id, Some(ctx));
         }
     }
 }

@@ -49,17 +49,13 @@ impl Infer for Pattern {
                     id,
                 ),
 
-                PathItem(Path(q, item)) => {
-                    let file = ctx.get_file_from_qualifier(q);
-                    ctx.program.return_ctx(ctx.clone());
-                    ctx.program
-                        .clone()
-                        .get_infered_module::<Vec<_>, _>(file, |ctx| {
-                            PatternKind::Atom(Identifier(item.data.clone()))
-                                .with_loc(&item)
-                                .infer((ctx, set))
-                        })
-                }
+                PathItem(ref path @ Path(_, ref item)) => ctx
+                    .ctx_from_path(path, |ctx| {
+                        PatternKind::Atom(Identifier(item.data.clone()))
+                            .with_loc(item)
+                            .infer((ctx, set))
+                    })
+                    .unwrap_or_else(|| ctx.infer_error()),
             },
 
             PatternKind::Constructor(name, args) => {
