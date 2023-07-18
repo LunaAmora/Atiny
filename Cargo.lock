@@ -78,6 +78,7 @@ version = "0.1.0"
 dependencies = [
  "atiny-error",
  "atiny-location",
+ "atiny-misc",
  "atiny-parser",
  "atiny-tree",
  "im-rc",
@@ -92,7 +93,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "atiny-fs"
+version = "0.1.0"
+dependencies = [
+ "atiny-location",
+]
+
+[[package]]
 name = "atiny-location"
+version = "0.1.0"
+
+[[package]]
+name = "atiny-misc"
 version = "0.1.0"
 
 [[package]]
@@ -100,6 +112,7 @@ name = "atiny-parser"
 version = "0.1.0"
 dependencies = [
  "atiny-error",
+ "atiny-fs",
  "atiny-location",
  "atiny-tree",
  "itertools",
@@ -127,6 +140,7 @@ name = "atiny-tree"
 version = "0.1.0"
 dependencies = [
  "atiny-location",
+ "atiny-misc",
  "itertools",
 ]
 

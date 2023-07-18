@@ -13,7 +13,7 @@ itertools = "0.10.5"
 atiny-location = {path = "../atiny-location" }
 atiny-tree = {path = "../atiny-tree" }
 atiny-error = {path = "../atiny-error" }
-
+atiny-fs = {path = "../atiny-fs" }
 
 [build-dependencies]
 lalrpop = {version = "0.20.0", default-features = false, features = ["lexer", "unicode"]}

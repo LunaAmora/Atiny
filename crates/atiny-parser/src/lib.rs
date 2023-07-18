@@ -2,14 +2,13 @@
 //! that is described in the README.md and using a LALR(1) parser generator called LALRPOP. It does
 //! not include error recovery strategies nor incremental parsing.
 
-#![feature(trait_alias)]
+pub mod error;
+pub use atiny_fs;
+
 use atiny_error::Error;
+use atiny_fs::File;
 use atiny_tree::r#abstract::{Expr, TopLevel};
 use error::from_lalrpop;
-use io::File;
-
-pub mod error;
-pub mod io;
 
 #[macro_use]
 extern crate lalrpop_util;

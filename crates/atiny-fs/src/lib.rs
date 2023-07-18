@@ -1,3 +1,5 @@
+#![feature(trait_alias)]
+
 use std::{collections::HashMap, error::Error, io, path::PathBuf, rc::Rc};
 
 use atiny_location::NodeId;

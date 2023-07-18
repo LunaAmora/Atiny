@@ -1,7 +1,8 @@
 use crate::context::Ctx;
 use crate::{check::Check, infer::Infer, types::*};
-use atiny_parser::io::File;
-use atiny_tree::{elaborated::FnBody, r#abstract::*, SeqIter};
+use atiny_misc::SeqIter;
+use atiny_parser::atiny_fs::File;
+use atiny_tree::{elaborated::FnBody, r#abstract::*};
 use itertools::Itertools;
 use std::iter::FromIterator;
 use std::{collections::HashSet, iter, rc::Rc};

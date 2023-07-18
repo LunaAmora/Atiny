@@ -8,7 +8,7 @@ use std::rc::Rc;
 use atiny_location::{ByteRange, Located, NodeId};
 use itertools::Itertools;
 
-use crate::SeqHelper;
+use atiny_misc::SeqHelper;
 
 #[derive(Debug, Clone)]
 pub struct Qualifier(pub Vec<Located<String>>);

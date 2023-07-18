@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, fs::read_to_string, path::PathBuf
 
 use atiny_error::Error;
 use atiny_location::NodeId;
-use atiny_parser::io::{File, FileSystem, VirtualFileSystem};
+use atiny_parser::atiny_fs::{File, FileSystem, VirtualFileSystem};
 use atiny_parser::{Parser, Parsers};
 use atiny_tree::elaborated::FnBody;
 

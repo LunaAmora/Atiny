@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 atiny-location = {path = "../atiny-location" }
+atiny-misc = {path = "../atiny-misc" }
 atiny-tree = {path = "../atiny-tree" }
 atiny-error = {path = "../atiny-error" }
 atiny-parser = {path = "../atiny-parser" }
