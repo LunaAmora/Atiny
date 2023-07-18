@@ -131,7 +131,7 @@ impl Ord for Ref {
 
 impl PartialOrd for Ref {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.identifier().partial_cmp(&other.identifier())
+        Some(self.cmp(other))
     }
 }
 
