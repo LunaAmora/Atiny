@@ -24,31 +24,20 @@ impl Visitor for PartialAppRemover {
             unreachable!()
         };
 
-        let missing_args = typ.clone().iter().count();
-
-        if missing_args == 0 {
-            return;
-        }
-
         let abstraction_type = typ.clone();
         let mut symbols = VecDeque::new();
 
-        for i in 0..missing_args {
-            let MonoType::Arrow(current, next) = &*typ.clone().flatten() else {
-                unreachable!()
-            };
-
+        while let MonoType::Arrow(current, next) = &*typ.clone().flatten() {
             *typ = next.clone();
 
-            let symbol = Symbol(format!("_gen{}", i + 1));
+            let symbol = Symbol(format!("_gen{}", symbols.len() + 1));
             symbols.push_front((symbol.clone(), current.clone()));
 
-            let arg = VariableNode {
-                name: symbol,
-                inst_types: vec![current.clone()],
-            };
-
-            args.push(Expr::Variable(arg));
+            args.push(Expr::Variable(VariableNode::new(symbol)));
+        }
+        
+        if symbols.is_empty() {
+            return;
         }
 
         let application = std::mem::take(expr);
