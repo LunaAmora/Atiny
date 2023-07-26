@@ -2,11 +2,12 @@ use crate::context::Ctx;
 use crate::{check::Check, infer::Infer, types::*};
 use atiny_misc::SeqIter;
 use atiny_parser::atiny_fs::File;
-use atiny_tree::{elaborated::FnBody, r#abstract::*};
+use atiny_tree::r#abstract::*;
 use itertools::Itertools;
 use std::iter::FromIterator;
 use std::{collections::HashSet, iter, rc::Rc};
 
+use super::expr::Elaborated;
 use super::module::ModuleMap;
 
 impl Infer for Vec<TopLevel> {
@@ -243,9 +244,12 @@ impl Infer for FnDecl {
     }
 }
 
+#[derive(Debug)]
+pub struct FnBody(pub String, pub Elaborated);
+
 impl Infer for (String, Expr) {
     type Context<'a> = &'a mut Ctx;
-    type Return = FnBody<Type>;
+    type Return = FnBody;
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (fn_name, body) = self;
@@ -260,6 +264,7 @@ impl Infer for (String, Expr) {
             let witness = new_ctx.single_exhaustiveness(arg_pat, arg_type.clone());
 
             if let Err(err) = witness.result() {
+                // Todo: Return the case tree of the arguments
                 new_ctx.set_position(arg_pat.location);
                 new_ctx.error(format!(
                     "refutable pattern in function argument. pattern '{}' not covered",
@@ -268,7 +273,7 @@ impl Infer for (String, Expr) {
             };
         }
 
-        FnBody(body.check(new_ctx, sig.return_type()))
+        FnBody(fn_name, body.check(new_ctx, sig.return_type()))
     }
 }
 

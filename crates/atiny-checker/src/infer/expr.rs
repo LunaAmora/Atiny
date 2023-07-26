@@ -15,7 +15,7 @@ use atiny_tree::r#abstract::*;
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
-type Elaborated = elaborated::Expr<Type>;
+pub type Elaborated = elaborated::Expr<Type>;
 
 impl Infer for &Expr {
     type Context<'a> = Ctx;
@@ -43,8 +43,8 @@ impl Infer for &Expr {
                         let (inst, inst_types) = sigma.instantiate(ctx);
 
                         let variable_node = VariableNode {
-                            inst_types,
                             name: Symbol(x.to_owned()),
+                            inst_types,
                         };
 
                         (inst, Elaborated::Variable(variable_node))
@@ -72,7 +72,8 @@ impl Infer for &Expr {
                 unify(ctx, t0, function_type);
 
                 let appl = match elab_fun {
-                    Elaborated::Application(_, ref mut args, _) => {
+                    Elaborated::Application(_, ref mut args, ref mut typ) => {
+                        *typ = t_ret.clone();
                         args.push(elab_arg);
                         elab_fun
                     }
@@ -87,17 +88,21 @@ impl Infer for &Expr {
                 let new_ctx = ctx.extend(param.to_owned(), t.to_poly());
                 let (t_line, mut elab_body) = body.infer(new_ctx);
 
-                let symbol = Symbol(param.to_owned());
+                let symbol = (Symbol(param.to_owned()), t.clone());
+                let t_ret = t.arrow(t_line, id);
 
                 let abs = match elab_body {
-                    Elaborated::Abstraction(ref mut args, _) => {
+                    Elaborated::Abstraction(ref mut args, _, ref mut typ) => {
+                        *typ = t_ret.clone();
                         args.push_back(symbol);
                         elab_body
                     }
-                    _ => Elaborated::Abstraction([symbol].into(), Box::new(elab_body)),
+                    _ => {
+                        Elaborated::Abstraction([symbol].into(), Box::new(elab_body), t_ret.clone())
+                    }
                 };
 
-                (t.arrow(t_line, id), abs)
+                (t_ret, abs)
             }
 
             Match(e, clauses) => {
@@ -276,8 +281,8 @@ impl Infer for &Expr {
 
                 let record_field = Elaborated::RecordField(
                     Symbol(record.id),
-                    Box::new(elab_expr),
                     Symbol(field.clone()),
+                    Box::new(elab_expr),
                 );
 
                 (field_ty, record_field)
