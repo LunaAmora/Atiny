@@ -7,10 +7,9 @@ use atiny_error::Error;
 use atiny_location::NodeId;
 use atiny_parser::atiny_fs::{File, FileSystem, VirtualFileSystem};
 use atiny_parser::{Parser, Parsers};
-use atiny_tree::elaborated::FnBody;
 
 use crate::context::Ctx;
-use crate::types::Type;
+use crate::infer::top_level::FnBody;
 
 pub struct CtxGuard(Option<Ctx>, Program);
 
@@ -136,7 +135,7 @@ impl Program {
 
 pub struct Prog {
     pub file_system: Box<dyn VirtualFileSystem<PathBuf, io::Error>>,
-    pub elaborated: HashMap<NodeId, Vec<FnBody<Type>>>,
+    pub elaborated: HashMap<NodeId, Vec<FnBody>>,
     pub errors: Vec<Error>,
     entry_point: NodeId,
     modules: HashMap<NodeId, Option<Ctx>>,

@@ -233,9 +233,9 @@ impl Type {
 }
 
 impl Type {
-    pub fn get_constructor(&self) -> Option<String> {
+    pub fn get_constructor(&self) -> Option<&str> {
         match &**self {
-            MonoType::Application(s, _) => Some(s.clone()),
+            MonoType::Application(s, _) => Some(s),
             _ => None,
         }
     }

@@ -2,11 +2,12 @@ use crate::context::Ctx;
 use crate::{check::Check, infer::Infer, types::*};
 use atiny_misc::SeqIter;
 use atiny_parser::atiny_fs::File;
-use atiny_tree::{elaborated::FnBody, r#abstract::*};
+use atiny_tree::r#abstract::*;
 use itertools::Itertools;
 use std::iter::FromIterator;
-use std::{collections::HashSet, iter, rc::Rc};
+use std::{collections::HashSet, rc::Rc};
 
+use super::expr::Elaborated;
 use super::module::ModuleMap;
 
 impl Infer for Vec<TopLevel> {
@@ -119,51 +120,49 @@ impl Infer for (String, TypeDeclKind) {
     type Return = ();
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let (decl_name, kind) = self;
-        let name = iter::repeat(decl_name.as_str());
-
-        match kind {
-            TypeDeclKind::Sum(constrs) => name.zip(constrs).for_each(|constr| constr.infer(ctx)),
-            TypeDeclKind::Product(fields) => name.zip(fields).for_each(|field| field.infer(ctx)),
+        match self {
+            (name, TypeDeclKind::Sum(constrs)) => constrs
+                .into_iter()
+                .for_each(|constr| constr.infer((ctx, &name))),
+            (name, TypeDeclKind::Product(fields)) => fields
+                .into_iter()
+                .for_each(|field| field.infer((ctx, &name))),
         }
     }
 }
 
-impl Infer for (&str, Field) {
-    type Context<'a> = &'a mut Ctx;
+impl Infer for Field {
+    type Context<'a> = (&'a mut Ctx, &'a str);
     type Return = ();
 
-    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let (decl_name, field) = self;
-
+    fn infer(self, (ctx, decl_name): Self::Context<'_>) -> Self::Return {
         let Some(TypeSignature { params, .. }) = &ctx.lookup_type(decl_name) else {
             panic!("The String should be a valid type signature name on the Ctx");
         };
 
         let new_ctx = ctx.extend_types(params);
 
-        let mono = field.ty.infer(new_ctx);
+        let mono = self.ty.infer(new_ctx);
 
         let sig_value = &mut ctx.signatures.types.get_mut(decl_name).unwrap().value;
 
         if let TypeValue::Product(ref mut rec) = sig_value {
-            rec.push((field.name.clone(), mono));
+            rec.push((self.name.clone(), mono));
         }
 
         ctx.signatures
             .fields
-            .entry(field.name)
+            .entry(self.name)
             .or_default()
             .insert(decl_name.to_string());
     }
 }
 
-impl Infer for (&str, Constructor) {
-    type Context<'a> = &'a mut Ctx;
+impl Infer for Constructor {
+    type Context<'a> = (&'a mut Ctx, &'a str);
     type Return = ();
 
-    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let (decl_name, constr) = self;
+    fn infer(self, (ctx, decl_name): Self::Context<'_>) -> Self::Return {
         let id = ctx.id;
 
         let Some(TypeSignature { params, .. }) = &ctx.lookup_type(decl_name) else {
@@ -180,14 +179,14 @@ impl Infer for (&str, Constructor) {
 
         let new_ctx = ctx.extend_types(params);
 
-        let args: Vec<_> = constr
+        let args: Vec<_> = self
             .types
             .iter()
             .map(|t| t.infer(new_ctx.clone()))
             .collect();
 
         let value = Rc::new(ConstructorSignature::new(
-            constr.name.clone(),
+            self.name.clone(),
             params.clone(),
             Type::rfold_arrow(args.iter().cloned(), application, id),
             args,
@@ -201,7 +200,7 @@ impl Infer for (&str, Constructor) {
 
         ctx.signatures
             .values
-            .insert(constr.name, DeclSignature::Constructor(value));
+            .insert(self.name, DeclSignature::Constructor(value));
     }
 }
 
@@ -243,9 +242,12 @@ impl Infer for FnDecl {
     }
 }
 
+#[derive(Debug)]
+pub struct FnBody(pub String, pub Elaborated);
+
 impl Infer for (String, Expr) {
     type Context<'a> = &'a mut Ctx;
-    type Return = FnBody<Type>;
+    type Return = FnBody;
 
     fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
         let (fn_name, body) = self;
@@ -260,6 +262,7 @@ impl Infer for (String, Expr) {
             let witness = new_ctx.single_exhaustiveness(arg_pat, arg_type.clone());
 
             if let Err(err) = witness.result() {
+                // Todo: Return the case tree of the arguments
                 new_ctx.set_position(arg_pat.location);
                 new_ctx.error(format!(
                     "refutable pattern in function argument. pattern '{}' not covered",
@@ -268,7 +271,7 @@ impl Infer for (String, Expr) {
             };
         }
 
-        FnBody(body.check(new_ctx, sig.return_type()))
+        FnBody(fn_name, body.check(new_ctx, sig.return_type()))
     }
 }
 

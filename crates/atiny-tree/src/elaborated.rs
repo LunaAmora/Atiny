@@ -4,13 +4,21 @@
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Symbol(pub String);
+
+impl Display for Symbol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+pub type Labeled<T> = (Symbol, T);
 
 #[derive(Debug)]
 pub struct VariableNode<T> {
-    pub inst_types: Vec<T>,
     pub name: Symbol,
+    pub inst_types: Vec<T>,
 }
 
 #[derive(Debug)]
@@ -22,17 +30,17 @@ pub enum Stmt<T> {
 #[derive(Debug)]
 pub enum Expr<T> {
     Number(u64),
-    Tuple(Vec<Expr<T>>),
+    Tuple(Vec<Self>),
     Variable(VariableNode<T>),
 
-    CaseTree(Box<Expr<T>>, CaseTree<T>),
+    CaseTree(Box<Self>, CaseTree<T>),
 
-    Abstraction(VecDeque<Symbol>, Box<Expr<T>>),
-    Application(Box<Expr<T>>, Vec<Expr<T>>, T),
+    Abstraction(VecDeque<Labeled<T>>, Box<Self>, T),
+    Application(Box<Self>, Vec<Self>, T),
 
-    RecordCreation(Symbol, Vec<(Symbol, Expr<T>)>),
-    RecordUpdate(Box<Expr<T>>, Vec<(Symbol, Expr<T>)>),
-    RecordField(Symbol, Box<Expr<T>>, Symbol),
+    RecordCreation(Symbol, Vec<Labeled<Self>>),
+    RecordUpdate(Box<Self>, Vec<Labeled<Self>>),
+    RecordField(Symbol, Symbol, Box<Self>),
 
     Block(Vec<Stmt<T>>),
 
@@ -47,7 +55,7 @@ pub struct CaseTree<T> {
 
 #[derive(Debug)]
 pub enum CaseTreeNode {
-    Node(Vec<(Symbol, CaseTreeNode)>),
+    Node(Vec<Labeled<CaseTreeNode>>),
     Leaf(usize),
 }
 
@@ -56,11 +64,11 @@ impl CaseTreeNode {
         match self {
             Self::Node(vec) => {
                 for (name, tree) in vec {
-                    writeln!(f, "{:indent$}{:?}:", "", name, indent = indent)?;
+                    writeln!(f, "{:indent$}{name}:", "")?;
                     tree.render_indented(f, indent + 2)?;
                 }
             }
-            Self::Leaf(index) => writeln!(f, "{:indent$}{}", "", index, indent = indent)?,
+            Self::Leaf(index) => writeln!(f, "{:indent$}{index}", "")?,
         }
         Ok(())
     }
@@ -71,5 +79,3 @@ impl Display for CaseTreeNode {
         self.render_indented(f, 0)
     }
 }
-
-pub struct FnBody<T>(pub Expr<T>);

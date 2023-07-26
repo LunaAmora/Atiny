@@ -67,6 +67,7 @@ dependencies = [
  "atiny-checker",
  "atiny-error",
  "atiny-location",
+ "atiny-lowering",
  "atiny-parser",
  "atiny-tree",
  "clap",
@@ -102,6 +103,14 @@ dependencies = [
 [[package]]
 name = "atiny-location"
 version = "0.1.0"
+
+[[package]]
+name = "atiny-lowering"
+version = "0.1.0"
+dependencies = [
+ "atiny-checker",
+ "atiny-tree",
+]
 
 [[package]]
 name = "atiny-misc"

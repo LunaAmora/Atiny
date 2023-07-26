@@ -3,7 +3,6 @@
 //! [TopLevel].
 
 use std::fmt::{self, Display};
-use std::rc::Rc;
 
 use atiny_location::{ByteRange, Located, NodeId};
 use itertools::Itertools;
@@ -123,7 +122,7 @@ pub enum ExprKind {
     Abstraction(String, Box<Expr>),
     Application(Box<Expr>, Box<Expr>),
     Annotation(Box<Expr>, Box<TypeNode>),
-    RecordCreation(Box<Expr>, Rc<[ExprField]>),
+    RecordCreation(Box<Expr>, Vec<ExprField>),
     Field(Box<Expr>, String),
     Block(Vec<Statement>),
 }
