@@ -35,7 +35,7 @@ impl Visitor for PartialAppRemover {
 
             args.push(Expr::Variable(VariableNode::new(symbol)));
         }
-        
+
         if symbols.is_empty() {
             return;
         }
