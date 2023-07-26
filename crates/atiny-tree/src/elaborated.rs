@@ -21,6 +21,15 @@ pub struct VariableNode<T> {
     pub inst_types: Vec<T>,
 }
 
+impl<T> VariableNode<T> {
+    pub fn new(name: Symbol) -> Self {
+        Self {
+            name,
+            inst_types: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Stmt<T> {
     Let(CaseTreeNode, Expr<T>),
