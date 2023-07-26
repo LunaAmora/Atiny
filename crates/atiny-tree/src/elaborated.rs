@@ -15,7 +15,7 @@ impl Display for Symbol {
 
 pub type Labeled<T> = (Symbol, T);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VariableNode<T> {
     pub name: Symbol,
     pub inst_types: Vec<T>,
@@ -45,6 +45,12 @@ pub enum Expr<T> {
     Block(Vec<Stmt<T>>),
 
     Error,
+}
+
+impl<T> Default for Expr<T> {
+    fn default() -> Self {
+        Self::Error
+    }
 }
 
 #[derive(Debug)]
