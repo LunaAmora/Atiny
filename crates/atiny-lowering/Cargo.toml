@@ -1,0 +1,11 @@
+[package]
+name = "atiny-lowering"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+atiny-checker = { path = "../atiny-checker" }
+atiny-tree = { path = "../atiny-tree" }
+
+[lints]
+workspace = true
