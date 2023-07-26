@@ -115,7 +115,7 @@ InnerExpr: Expr = {
 }
 
 RecordItem: ExprKind = {
-    <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f.into())
+    <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f)
 }
 
 OuterItem: ExprKind = Item<Loc<RecordItem>>;

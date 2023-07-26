@@ -186,57 +186,42 @@ impl Infer for &Expr {
                 Atom(AtomKind::Identifier(name)) if ctx.lookup_type(name).is_some() => {
                     let typ = ctx.lookup_type(name).unwrap();
 
-                    let Some((record, ret_type)) =
-                        ctx.inst_sig_as_record(typ.clone(), name.to_owned())
-                    else {
-                        ctx.set_position(expr.location);
-                        return ctx.new_error(format!("the type '{typ}' is not a record"));
+                    ctx.set_position(expr.location);
+
+                    let Some((ret, record)) = ctx.inst_sig_as_record(typ, name) else {
+                        return ctx.new_error(format!("the type '{name}' is not a record"));
                     };
 
-                    let err_count = ctx.err_count();
-                    let elab_fields = user_fields.infer((ctx.clone(), record, true));
+                    let elaborated = record.infer((&ctx, name, user_fields));
 
-                    let elaborated = if err_count != ctx.err_count() {
-                        Elaborated::Error
-                    } else {
-                        Elaborated::RecordCreation(Symbol(name.to_owned()), elab_fields)
-                    };
-
-                    (ret_type, elaborated)
+                    (ret, elaborated)
                 }
 
                 Atom(AtomKind::PathItem(path @ Path(_, item))) => {
-                    let Some(inst) = ctx.ctx_from_path(path, |ctx| {
-                        ctx.lookup_type(&item.data)
-                            .and_then(|typ| ctx.inst_sig_as_record(typ, item.data.to_owned()))
-                    }) else {
-                        return ctx.infer_error();
-                    };
+                    let name = &item.data;
 
-                    let Some((record, ret_type)) = inst else {
+                    let Some((ret, record)) = ctx
+                        .ctx_from_path(path, |ctx| {
+                            ctx.lookup_type(&item.data)
+                                .and_then(|typ| ctx.inst_sig_as_record(typ, name))
+                        })
+                        .flatten()
+                    else {
                         ctx.set_position(item.location);
-                        return ctx.new_error(format!("the type '{item}' is not a record"));
+                        return ctx.new_error(format!("the type '{name}' is not a record"));
                     };
 
-                    let err_count = ctx.err_count();
                     ctx.set_position(expr.location);
+                    let elaborated = record.infer((&ctx, name, user_fields));
 
-                    let elab_fields = user_fields.infer((ctx.clone(), record, true));
-
-                    let elaborated = if err_count != ctx.err_count() {
-                        Elaborated::Error
-                    } else {
-                        Elaborated::RecordCreation(Symbol(item.data.to_owned()), elab_fields)
-                    };
-
-                    (ret_type, elaborated)
+                    (ret, elaborated)
                 }
 
                 _ => {
                     let err_count = ctx.err_count();
                     let (expr_ty, elab_expr) = expr.infer(ctx.clone());
 
-                    let Some((record, ret_type)) = ctx.as_record_info(&expr_ty) else {
+                    let Some((ret_type, record)) = ctx.get_record_info(&expr_ty) else {
                         ctx.error(format!("the type '{expr_ty}' is not a record"));
                         return (expr_ty, Elaborated::Error);
                     };
@@ -259,7 +244,7 @@ impl Infer for &Expr {
                 let (expr_ty, elab_expr) = expr.infer(ctx.clone());
                 ctx.set_position(expr.location);
 
-                let Some((record, ret_type)) = ctx.as_record_info(&expr_ty) else {
+                let Some((ret_type, record)) = ctx.get_record_info(&expr_ty) else {
                     return ctx.new_error(format!("the type '{expr_ty}' is not a record"));
                 };
 
@@ -267,7 +252,7 @@ impl Infer for &Expr {
                 else {
                     return ctx.new_error(format!(
                         "field '{field}' does not exist in type '{}'",
-                        record.id
+                        record.name
                     ));
                 };
 
@@ -280,7 +265,7 @@ impl Infer for &Expr {
                 .instantiate_with(&record.vars);
 
                 let record_field = Elaborated::RecordField(
-                    Symbol(record.id),
+                    Symbol(record.name),
                     Symbol(field.clone()),
                     Box::new(elab_expr),
                 );
@@ -345,13 +330,20 @@ impl Infer for &[Statement] {
     }
 }
 
-impl InferError<(Type, Elaborated)> for Ctx {
-    fn error_message(&self, msg: String) {
-        self.error(msg);
-    }
+impl Infer for RecordInfo {
+    type Context<'a> = (&'a Ctx, &'a str, &'a [ExprField]);
+    type Return = Elaborated;
 
-    fn infer_error(&self) -> (Type, Elaborated) {
-        (Type::new(MonoType::Error, self.id), Elaborated::Error)
+    fn infer(self, (ctx, name, user_fields): Self::Context<'_>) -> Self::Return {
+        let err_count = ctx.err_count();
+
+        let elab_fields = user_fields.infer((ctx.clone(), self, true));
+
+        if err_count != ctx.err_count() {
+            Elaborated::Error
+        } else {
+            Elaborated::RecordCreation(Symbol(name.to_string()), elab_fields)
+        }
     }
 }
 
@@ -359,9 +351,7 @@ impl Infer for &[ExprField] {
     type Context<'a> = (Ctx, RecordInfo, bool);
     type Return = Vec<(Symbol, Elaborated)>;
 
-    fn infer(self, ctx: Self::Context<'_>) -> Self::Return {
-        let (ctx, record, exaustive) = ctx;
-
+    fn infer(self, (ctx, record, exaustive): Self::Context<'_>) -> Self::Return {
         let fields_map: HashMap<_, _> = record.fields.iter().map(|(s, t)| (s, t)).collect();
         let mut fields_to_remove: HashSet<_> = fields_map.keys().collect();
         let mut elab_fields = vec![];
@@ -392,7 +382,7 @@ impl Infer for &[ExprField] {
             } else {
                 ctx.error(format!(
                     "field '{name}' does not exist in type '{}'",
-                    record.id
+                    record.name
                 ));
             }
         }
@@ -409,14 +399,14 @@ impl Infer for &[ExprField] {
 }
 
 pub struct RecordInfo {
-    id: String,
+    name: String,
     fields: Vec<(String, Type)>,
     params: Vec<String>,
     vars: Vec<Type>,
 }
 
 impl Ctx {
-    fn as_record_info(&self, expr_ty: &Type) -> Option<(RecordInfo, Type)> {
+    fn get_record_info(&self, expr_ty: &Type) -> Option<(Type, RecordInfo)> {
         let ctx = {
             if self.id != expr_ty.1 {
                 self.program.update_ctx(self.clone());
@@ -427,12 +417,12 @@ impl Ctx {
         };
 
         expr_ty.get_constructor().and_then(|name| {
-            ctx.lookup_type(&name)
+            ctx.lookup_type(name)
                 .and_then(|typ| ctx.inst_sig_as_record(typ, name))
         })
     }
 
-    fn inst_sig_as_record(&self, sig: TypeSignature, id: String) -> Option<(RecordInfo, Type)> {
+    fn inst_sig_as_record(&self, sig: TypeSignature, name: &str) -> Option<(Type, RecordInfo)> {
         let mono = sig.application(self.id);
         let TypeSignature { params, value, .. } = sig;
 
@@ -447,12 +437,22 @@ impl Ctx {
         .instantiate(self.clone());
 
         let record = RecordInfo {
-            id,
+            name: name.to_string(),
             fields,
             params,
             vars,
         };
 
-        Some((record, ret_type))
+        Some((ret_type, record))
+    }
+}
+
+impl InferError<(Type, Elaborated)> for Ctx {
+    fn error_message(&self, msg: String) {
+        self.error(msg);
+    }
+
+    fn infer_error(&self) -> (Type, Elaborated) {
+        (Type::new(MonoType::Error, self.id), Elaborated::Error)
     }
 }
