@@ -48,9 +48,9 @@ impl Infer for &Expr {
                         };
 
                         let expr = match typ {
-                            VariableKind::Function => Elaborated::Variable(variable_node),
-                            VariableKind::Constructor => Elaborated::Function(variable_node),
-                            VariableKind::Local => Elaborated::Constructor(variable_node),
+                            VariableKind::Function => Elaborated::Function(variable_node),
+                            VariableKind::Constructor => Elaborated::Constructor(variable_node),
+                            VariableKind::Local => Elaborated::Variable(variable_node),
                         };
 
                         (inst, expr)
