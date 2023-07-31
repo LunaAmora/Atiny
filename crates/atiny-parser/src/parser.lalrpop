@@ -22,6 +22,7 @@ Sep<U, T>: (Vec<T>, bool) = {
     }
 };
 
+#[inline]
 BlockList<U, T>: Vec<T> = {
     r"[{][\s]*[}]"      => Vec::new(),
     "{" <Sep<U, T>> "}" => <>.0
@@ -67,85 +68,118 @@ AtomItem<I, O> : O = {
 
 // For expressions
 
-AtomExpr: Expr = Loc<AtomItem<Expr, ExprItem>>;
+AtomExpr: Expr = Loc<AtomItem<Expression, InnerItem>>;
 
-CallItem: ExprKind = <t:Call> <a:AtomExpr> => ExprKind::Application(Box::new(t), Box::new(a));
+CallItem: ExprKind = {
+    <t:CallTerm> <a:AtomExpr> => ExprKind::Application(Box::new(t), Box::new(a)),
+};
+
+CallTerm: Expr = {
+    Call,
+    Loc<AbsExpr<BlockExpr>>,
+    Loc<AbsExpr<MatchExpr<ExprItem>>>,
+}
 
 Call: Expr = {
     Loc<CallItem>,
     AtomExpr
 };
 
-Item<E>: ExprKind = {
-    "if" "let" <Pattern> "=" <E>
-        <BlockExpr> "else" <BlockExpr>       => ExprKind::if_let(<>),
-    "|" <t:LowerId> "|" <e:E>                => ExprKind::Abstraction(t, Box::new(e)),
-    "match" <e:E> <c:BlockList<",", Clause>> => ExprKind::Match(Box::new(e), c),
-} 
+RecordExpr: ExprKind = {
+    <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f)
+}
 
-ExprItem: ExprKind = {
-    Item<InnerExpr>,
+MatchExpr<E>: ExprKind = {
+    "match" <e:Loc<E>> <c:BlockList<",", Clause>> => ExprKind::Match(Box::new(e), c),
+}
+
+#[inline]
+AbsExpr<E>: ExprKind = {
+    "|" <t:LowerId> "|" <e:Loc<E>> => ExprKind::Abstraction(t, Box::new(e)),
+}
+
+IfLetExpr<E>: ExprKind = {
+    "if" "let" <Pattern> "=" <Loc<E>>
+        <Loc<BlockExpr>> "else" <Loc<BlockExpr>> => ExprKind::if_let(<>),
+}
+
+InnerItem: ExprKind = {
     <f:AtomExpr> "." <name:LowerId> => ExprKind::Field(Box::new(f), name),
     <f:Call> <t:TypeAnotation>      => ExprKind::Annotation(Box::new(f), Box::new(t)),
 };
 
 Statement: StatementKind = {
-    "let" <Pattern> "=" <Expr> => StatementKind::Let(<>),
-    Expr => StatementKind::Expr(<>)
+    "let" <Pattern> "=" <Expression> => StatementKind::Let(<>),
+    Expression => StatementKind::Expr(<>)
 }
 
 Block: Vec<Statement> = BlockList<";", Loc<Statement>>;
 
-BlockExpr: Expr = Loc<Block> => {
-    let location = <>.location;
-    let data = ExprKind::Block(if <>.data.is_empty() {
+BlockExpr: ExprKind = Loc<Block> => {
+    ExprKind::Block(if <>.data.is_empty() {
         vec![StatementKind::Expr(ExprKind::Atom(AtomKind::unit()).with_loc(&<>)).with_loc(&<>)]
     } else {
         <>.data
-    });
-    
-    Located { data, location }
+    })
 };
 
 #[inline]
-InnerExpr: Expr = {
-    Loc<ExprItem>,
+Term: ExprKind = {
+    InnerItem,
     BlockExpr,
-    Call,
+    Call => <>.data
 }
 
-RecordItem: ExprKind = {
-    <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f)
-}
+InfixItem<Left, Infix, Right>: ExprKind = Loc<Left> Loc<Infix> Loc<Right> => ExprKind::infix(<>, id);
 
-OuterItem: ExprKind = Item<Loc<RecordItem>>;
-
-Term: Expr = {
-    Loc<OuterItem>,
-    Loc<RecordItem>,
-    InnerExpr,
-};
-
-InfixItem<Left, Infix, Right>: ExprKind = Left Loc<Infix> Right => ExprKind::infix(<>, id);
-
-InfixExpr<Left, Infix, Right>: Expr = {
-    Loc<InfixItem<Left, Infix, Right>>,
+#[inline]
+InfixExpr<Left, Infix, Right>: ExprKind = {
+    InfixItem<Left, Infix, Right>,
     Right,
 }
 
-pub Expr: Expr = InfixExpr<Expr, Infix0, Factor>;
+Infix: &'input str = {
+    "*" => "mul",
+    "/" => "div",
+}
 
-Factor: Expr = InfixExpr<Factor, Infix1, Term>;
-
-Infix0: &'input str = {
+Infix2: &'input str = {
     "+" => "add",
     "-" => "sub",
 }
 
-Infix1: &'input str = {
-    "*" => "mul",
-    "/" => "div",
+Indirect<T> = T;
+
+#[inline]
+Factor: ExprKind = InfixExpr<Indirect<Factor>, Infix, Term>;
+
+#[inline]
+Factor2: ExprKind = InfixExpr<Indirect<Factor2>, Infix2, Factor>;
+
+#[inline]
+ExprItem: ExprKind = {
+    Factor2,
+    RecordExpr,
 }
+
+InnerExpr: ExprKind = {
+    ExprItem,
+    MatchExpr<ExprItem>,
+    IfLetExpr<ExprItem>,
+
+    //Todo: report useless constructions
+    MatchExpr<AbsExpr<ExprItem>>,
+    IfLetExpr<AbsExpr<ExprItem>>
+}
+
+OuterExpr: ExprKind = {
+    InnerExpr,
+    AbsExpr<OuterExpr>,
+}
+
+pub Expression: Expr = Loc<OuterExpr>;
+
+// For Patterns
 
 AtomPattern: Pattern = Loc<AtomItem<Pattern, PatternItem>>;
 
@@ -156,9 +190,9 @@ Pattern: Pattern = {
     AtomPattern
 };
 
-Clause: Clause = <Pattern> "=>" <Expr> => Clause::new(<>);
+Clause: Clause = <Pattern> "=>" <Expression> => Clause::new(<>);
 
-ExprField: ExprField = <name: LowerId> "=" <expr: Expr> => ExprField {<>};
+ExprField: ExprField = <name: LowerId> "=" <expr: Expression> => ExprField {<>};
 
 // For Types
 
@@ -236,7 +270,7 @@ TypeAnotation: TypeNode = ":" <TypeNode>;
 
 Param: (Pattern, TypeNode) = "(" <Pattern> <TypeAnotation> ")" => (<>);
 
-FnDecl: FnDecl = "fn" <Loc<LowerId>> <Param*> <TypeAnotation?> <BlockExpr> => FnDecl::new(<>);
+FnDecl: FnDecl = "fn" <Loc<LowerId>> <Param*> <TypeAnotation?> <Loc<BlockExpr>> => FnDecl::new(<>);
 
 UsePath: (Vec<Located<String>>, Option<Located<String>>) = {
     <a:(<Loc<UpperId>> "::")+> <b:Loc<Id>> => (a, Some(b)),
