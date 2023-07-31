@@ -66,7 +66,7 @@ impl Ctx {
             let mut prog = self.program.borrow_mut();
             let path = qualifier.0.iter().join(".");
 
-            if let Ok(file) = prog.file_system.get_file_relative(&path, self.id) {
+            if let Ok(file) = prog.file_system.get_file_relative(path, self.id) {
                 return Some(file);
             }
         }
