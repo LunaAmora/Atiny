@@ -1,5 +1,5 @@
 use super::Infer;
-use crate::context::{Ctx, InferError};
+use crate::context::{Ctx, InferError, VariableKind};
 use crate::exhaustive::{Problem, Witness};
 use crate::types::{MonoType, Type};
 use crate::unify::unify;
@@ -38,7 +38,7 @@ impl Infer for Pattern {
 
                 Identifier(x) if set.insert(x.to_owned()) => {
                     let hole = ctx.new_hole();
-                    ctx.map.insert(x, hole.to_poly());
+                    ctx.map.insert(x, (VariableKind::Local, hole.to_poly()));
                     hole
                 }
 
@@ -108,7 +108,10 @@ impl Ctx {
             (PatternKind::Atom(AtomKind::Wildcard), _) => {}
 
             (PatternKind::Atom(atom), _) => {
-                self.map.insert(atom.to_string(), pattern_type.to_poly());
+                self.map.insert(
+                    atom.to_string(),
+                    (VariableKind::Local, pattern_type.to_poly()),
+                );
             }
 
             (PatternKind::Constructor(_, patterns), MonoType::Application(_, apps)) => {

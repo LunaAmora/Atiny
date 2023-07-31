@@ -8,6 +8,8 @@ pub trait Visitor<T = Type> {
     fn visit_type(&mut self, _: &mut T) {}
 
     fn visit_variable(&mut self, _: &mut VariableNode<T>) {}
+    fn visit_function(&mut self, _: &mut VariableNode<T>) {}
+    fn visit_constructor(&mut self, _: &mut VariableNode<T>) {}
 
     fn visit_application(&mut self, _: &mut Expr<T>) {}
     fn visit_abstraction(&mut self, _: &mut Expr<T>) {}
