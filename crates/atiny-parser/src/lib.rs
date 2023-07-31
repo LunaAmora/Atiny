@@ -33,7 +33,7 @@ impl Parser<Vec<TopLevel>> for ProgramParser {
     }
 }
 
-impl Parser<Expr> for ExprParser {
+impl Parser<Expr> for ExpressionParser {
     fn parse(&self, file: &File) -> Result<Expr, Error> {
         self.parse(file.id, &file.code)
             .map_err(|e| from_lalrpop(e, file.id))
@@ -61,7 +61,7 @@ impl Default for Parsers {
     fn default() -> Self {
         Self {
             top_level: Box::new(ProgramParser::new()),
-            expr: Box::new(ExprParser::new()),
+            expr: Box::new(ExpressionParser::new()),
         }
     }
 }

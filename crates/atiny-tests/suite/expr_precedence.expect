@@ -1,0 +1,9 @@
+
+[error]: the clause is useless: _
+
+    ┌─> expr_precedence.at:31:12
+    │
+ 31 │     } else {
+ 32 │         10
+ 33 │     }
+    │
