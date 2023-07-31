@@ -20,13 +20,13 @@ Sep<U, T>: (Vec<T>, bool) = {
         }
         None => (v, true)
     }
-};
+}
 
 #[inline]
 BlockList<U, T>: Vec<T> = {
     r"[{][\s]*[}]"      => Vec::new(),
     "{" <Sep<U, T>> "}" => <>.0
-};
+}
 
 Path: (Vec<Located<String>>, Located<String>) = {
     <s:Loc<UpperId>> <e:("::" <Loc<LowerId>>)> => {
@@ -47,7 +47,7 @@ Path: (Vec<Located<String>>, Located<String>) = {
             (res, e)
         }
     },
-};
+}
 
 // O: From<AtomKind<O>>
 AtomItem<I, O> : O = {
@@ -72,7 +72,7 @@ AtomExpr: Expr = Loc<AtomItem<Expression, InnerItem>>;
 
 CallItem: ExprKind = {
     <t:CallTerm> <a:AtomExpr> => ExprKind::Application(Box::new(t), Box::new(a)),
-};
+}
 
 CallTerm: Expr = {
     Call,
@@ -83,7 +83,7 @@ CallTerm: Expr = {
 Call: Expr = {
     Loc<CallItem>,
     AtomExpr
-};
+}
 
 RecordExpr: ExprKind = {
     <t:Call> <f:BlockList<",", ExprField>> => ExprKind::RecordCreation(Box::new(t), f)
@@ -106,7 +106,7 @@ IfLetExpr<E>: ExprKind = {
 InnerItem: ExprKind = {
     <f:AtomExpr> "." <name:LowerId> => ExprKind::Field(Box::new(f), name),
     <f:Call> <t:TypeAnotation>      => ExprKind::Annotation(Box::new(f), Box::new(t)),
-};
+}
 
 Statement: StatementKind = {
     "let" <Pattern> "=" <Expression> => StatementKind::Let(<>),
@@ -115,13 +115,11 @@ Statement: StatementKind = {
 
 Block: Vec<Statement> = BlockList<";", Loc<Statement>>;
 
-BlockExpr: ExprKind = Loc<Block> => {
-    ExprKind::Block(if <>.data.is_empty() {
-        vec![StatementKind::Expr(ExprKind::Atom(AtomKind::unit()).with_loc(&<>)).with_loc(&<>)]
-    } else {
-        <>.data
-    })
-};
+BlockExpr: ExprKind = Loc<Block> => ExprKind::Block(if <>.data.is_empty() {
+    vec![StatementKind::Expr(ExprKind::Atom(AtomKind::unit()).with_loc(&<>)).with_loc(&<>)]
+} else {
+    <>.data
+});
 
 #[inline]
 Term: ExprKind = {
@@ -188,7 +186,7 @@ PatternItem: PatternKind = UpperId AtomPattern+ => PatternKind::Constructor(<>);
 Pattern: Pattern = {
     Loc<PatternItem>,
     AtomPattern
-};
+}
 
 Clause: Clause = <Pattern> "=>" <Expression> => Clause::new(<>);
 
@@ -231,14 +229,14 @@ TypeCallItem: TypeKind = {
 TypeCall: TypeNode = {
     Loc<TypeCallItem>,
     TypeAtom
-};
+}
 
 TypeArrowItem: TypeKind = <TypeCall> "->" <TypeNode> => TypeKind::Arrow(ArrowNode::new(<>));
 
 TypeArrow: TypeNode = {
     Loc<TypeArrowItem>,
     TypeCall
-};
+}
 
 TypeKind: TypeKind = {
     "forall" <args: LowerId*> "." <body: TypeNode> => {
@@ -249,7 +247,7 @@ TypeKind: TypeKind = {
 TypeNode: TypeNode = {
     Loc<TypeKind>,
     TypeArrow
-};
+}
 
 // Top level
 
@@ -273,10 +271,10 @@ Param: (Pattern, TypeNode) = "(" <Pattern> <TypeAnotation> ")" => (<>);
 FnDecl: FnDecl = "fn" <Loc<LowerId>> <Param*> <TypeAnotation?> <Loc<BlockExpr>> => FnDecl::new(<>);
 
 UsePath: (Vec<Located<String>>, Option<Located<String>>) = {
-    <a:(<Loc<UpperId>> "::")+> <b:Loc<Id>> => (a, Some(b)),
+    <a:(<Loc<UpperId>> "::")+> <b:Loc<Id>>  => (a, Some(b)),
     <a:(<Loc<UpperId>> "::")+> <b:Loc<"*">> => (a, Some(b.map(|star| star.to_string()))),
     <Loc<UpperId>> => (vec![<>], None)
-};
+}
 
 UseDecl: UseDecl = "use" <UsePath> => UseDecl(Qualifier(<>.0), <>.1);
 
