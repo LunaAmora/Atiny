@@ -1,0 +1,34 @@
+fn test1 : Int {
+    let a = |x| x + 2;
+    a 1
+}
+
+fn test2 : Int {
+    |x| { x + 2 } 1
+}
+
+fn test3 : Int {
+    |a| match a {
+        x => x,
+    } 2
+}
+
+fn test4 : Int {
+    match 2 + 3 {
+        x => x,
+    }
+}
+
+fn test5 : Int {
+    match |x| x {
+        x => x 2,
+    }
+}
+
+fn test6 : Int {
+    if let a = |x| x {
+        a 2
+    } else {
+        10
+    }
+}
