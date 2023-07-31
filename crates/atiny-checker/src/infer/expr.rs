@@ -2,7 +2,7 @@
 
 use super::Infer;
 use crate::check::Check;
-use crate::context::{Ctx, InferError};
+use crate::context::{Ctx, InferError, VariableKind};
 use crate::exhaustive::Problem;
 use crate::types::{MonoType, Type, TypeScheme, TypeSignature, TypeValue};
 use crate::unify::unify;
@@ -39,7 +39,7 @@ impl Infer for &Expr {
                 }
 
                 Identifier(x) => match ctx.lookup(x) {
-                    Some(sigma) => {
+                    Some((typ, sigma)) => {
                         let (inst, inst_types) = sigma.instantiate(ctx);
 
                         let variable_node = VariableNode {
@@ -47,7 +47,13 @@ impl Infer for &Expr {
                             inst_types,
                         };
 
-                        (inst, Elaborated::Variable(variable_node))
+                        let expr = match typ {
+                            VariableKind::Function => Elaborated::Variable(variable_node),
+                            VariableKind::Constructor => Elaborated::Function(variable_node),
+                            VariableKind::Local => Elaborated::Constructor(variable_node),
+                        };
+
+                        (inst, expr)
                     }
 
                     None => ctx.new_error(format!("unbound variable '{}'", x)),
@@ -85,7 +91,7 @@ impl Infer for &Expr {
 
             Abstraction(param, body) => {
                 let t = ctx.new_hole();
-                let new_ctx = ctx.extend(param.to_owned(), t.to_poly());
+                let new_ctx = ctx.extend(param.to_owned(), VariableKind::Local, t.to_poly());
                 let (t_line, mut elab_body) = body.infer(new_ctx);
 
                 let symbol = (Symbol(param.to_owned()), t.clone());

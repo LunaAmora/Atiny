@@ -44,12 +44,19 @@ impl Display for Imports {
 }
 
 #[derive(Clone)]
+pub enum VariableKind {
+    Function,
+    Constructor,
+    Local,
+}
+
+#[derive(Clone)]
 pub struct Ctx {
     pub id: NodeId,
     pub program: Program,
     pub imports: Rc<RefCell<im_rc::HashMap<NodeId, Imports>>>,
     counter: Rc<RefCell<usize>>,
-    pub map: im_rc::OrdMap<String, Rc<TypeScheme>>,
+    pub map: im_rc::OrdMap<String, (VariableKind, Rc<TypeScheme>)>,
     pub typ_map: im_rc::OrdSet<String>,
     pub location: RefCell<ByteRange>,
     pub level: usize,
@@ -79,10 +86,10 @@ impl Ctx {
         let sig = int.clone().arrow(int.clone().arrow(int, id), id).to_poly();
 
         ctx.map.extend([
-            ("add".to_string(), sig.clone()),
-            ("sub".to_string(), sig.clone()),
-            ("mul".to_string(), sig.clone()),
-            ("div".to_string(), sig),
+            ("add".to_string(), (VariableKind::Function, sig.clone())),
+            ("sub".to_string(), (VariableKind::Function, sig.clone())),
+            ("mul".to_string(), (VariableKind::Function, sig.clone())),
+            ("div".to_string(), (VariableKind::Function, sig)),
         ]);
 
         #[allow(clippy::let_unit_value)]
@@ -97,9 +104,9 @@ impl Ctx {
 
 impl Ctx {
     // Extends a context with a new binding.
-    pub fn extend(&self, name: String, typ: Rc<TypeScheme>) -> Self {
+    pub fn extend(&self, name: String, kind: VariableKind, typ: Rc<TypeScheme>) -> Self {
         Self {
-            map: self.map.update(name, typ),
+            map: self.map.update(name, (kind, typ)),
             ..self.clone()
         }
     }
@@ -147,14 +154,18 @@ impl Ctx {
     }
 
     /// Looks up a type variable name in the context.
-    pub fn lookup(&self, name: &str) -> Option<Rc<TypeScheme>> {
+    pub fn lookup(&self, name: &str) -> Option<(VariableKind, Rc<TypeScheme>)> {
         self.map
             .get(name)
             .cloned()
             .or_else(|| {
                 self.signatures.values.get(name).map(|decl| match decl {
-                    DeclSignature::Function(fun) => fun.entire_type.clone(),
-                    DeclSignature::Constructor(decl) => decl.typ.clone(),
+                    DeclSignature::Function(fun) => {
+                        (VariableKind::Function, fun.entire_type.clone())
+                    }
+                    DeclSignature::Constructor(decl) => {
+                        (VariableKind::Constructor, decl.typ.clone())
+                    }
                 })
             })
             .or_else(|| self.lookup_on_imports(name, |ctx| ctx.lookup(name)))

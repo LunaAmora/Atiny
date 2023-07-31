@@ -40,7 +40,10 @@ pub enum Stmt<T> {
 pub enum Expr<T> {
     Number(u64),
     Tuple(Vec<Self>),
+
     Variable(VariableNode<T>),
+    Function(VariableNode<T>),
+    Constructor(VariableNode<T>),
 
     CaseTree(Box<Self>, CaseTree<T>),
 

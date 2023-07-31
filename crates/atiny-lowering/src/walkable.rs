@@ -22,6 +22,24 @@ impl<T> Walkable<T> for Expr<T> {
                 }
             }
 
+            Self::Function(var) => {
+                visitor.visit_function(var);
+                visitor.visit_symbol(&mut var.name);
+
+                for typ in var.inst_types.iter_mut() {
+                    visitor.visit_type(typ);
+                }
+            }
+
+            Self::Constructor(var) => {
+                visitor.visit_constructor(var);
+                visitor.visit_symbol(&mut var.name);
+
+                for typ in var.inst_types.iter_mut() {
+                    visitor.visit_type(typ);
+                }
+            }
+
             Self::CaseTree(expr, case_tree) => {
                 expr.walk(visitor);
 
