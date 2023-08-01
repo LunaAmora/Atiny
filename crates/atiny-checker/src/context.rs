@@ -3,7 +3,7 @@
 
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use atiny_error::{Error, Message, SugestionKind};
+use atiny_error::{Error, ErrorCreation};
 use atiny_location::{ByteRange, Located, NodeId};
 use atiny_tree::r#abstract::{Path, TypeDecl};
 use itertools::Itertools;
@@ -276,43 +276,6 @@ impl Ctx {
         }
     }
 
-    pub fn error(&self, msg: String) {
-        self.program.borrow_mut().errors.push(Error::new(
-            Message::Single(msg),
-            self.location.borrow().to_owned(),
-        ));
-    }
-
-    pub fn errors(&self, msg: Vec<String>) {
-        self.program.borrow_mut().errors.push(Error::new(
-            Message::Multi(msg),
-            self.location.borrow().to_owned(),
-        ));
-    }
-
-    pub fn suggestion(&self, msg: String, sugestion_kind: SugestionKind) {
-        self.program.borrow_mut().errors.push(Error::new_sugestion(
-            Message::Single(msg),
-            sugestion_kind,
-            self.location.borrow().to_owned(),
-        ));
-    }
-
-    pub fn suggestions(&self, msg: Vec<String>, sugestion_kind: SugestionKind) {
-        self.program.borrow_mut().errors.push(Error::new_sugestion(
-            Message::Multi(msg),
-            sugestion_kind,
-            self.location.borrow().to_owned(),
-        ));
-    }
-
-    pub fn dyn_error(&self, msg: impl Display + 'static) {
-        self.program
-            .borrow_mut()
-            .errors
-            .push(Error::new_dyn(msg, self.location.borrow().to_owned()));
-    }
-
     pub fn err_count(&self) -> usize {
         self.program.borrow().errors.len()
     }
@@ -379,6 +342,16 @@ impl Ctx {
                 (Items(ref mut items), Items(names)) => items.extend(names),
             },
         }
+    }
+}
+
+impl ErrorCreation for Ctx {
+    fn push_error(&self, error: Error) {
+        self.program.borrow_mut().errors.push(error);
+    }
+
+    fn location(&self) -> ByteRange {
+        *self.location.borrow()
     }
 }
 

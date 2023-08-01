@@ -8,6 +8,8 @@ use crate::{
     types::{Hole, MonoType, Ref, Type},
 };
 
+use atiny_error::ErrorCreation;
+
 #[derive(Debug)]
 pub struct OccursCheck;
 
