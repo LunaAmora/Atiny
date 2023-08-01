@@ -8,6 +8,7 @@ atiny-location = { path = "../atiny-location" }
 atiny-checker = { path = "../atiny-checker" }
 atiny-error = { path = "../atiny-error" }
 atiny-tree = { path = "../atiny-tree" }
+indexmap = "2.0.0"
 
 [lints]
 workspace = true

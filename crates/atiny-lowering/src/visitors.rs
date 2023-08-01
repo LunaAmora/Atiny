@@ -3,7 +3,8 @@ use atiny_checker::types::{MonoType, Type};
 use atiny_error::{Error, ErrorCreation};
 use atiny_location::{ByteRange, WithLoc};
 use atiny_tree::elaborated::{CaseTree, CaseTreeNode, Elaborated, Expr, Symbol, VariableNode};
-use std::collections::{HashMap, VecDeque};
+use indexmap::IndexMap;
+use std::collections::VecDeque;
 
 use crate::walkable::Walkable;
 
@@ -99,7 +100,7 @@ impl Visitor for ClosureMoveChecker {
 }
 
 #[derive(Default)]
-pub struct CollectLocalVars(HashMap<Symbol, ByteRange>);
+pub struct CollectLocalVars(IndexMap<Symbol, ByteRange>);
 
 impl Visitor for CollectLocalVars {
     fn visit_variable(&mut self, var: &mut VariableNode<Type>, loc: ByteRange) {
