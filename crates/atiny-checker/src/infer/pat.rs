@@ -6,7 +6,7 @@ use crate::exhaustive::{Problem, Witness};
 use crate::types::{MonoType, Type};
 use crate::unify::unify;
 
-use atiny_location::WithLoc;
+use atiny_location::{Located, WithLoc};
 use atiny_tree::elaborated::{Accessor, AccessorExt, Symbol};
 use atiny_tree::r#abstract::{wildcard, AtomKind, Path, Pattern, PatternKind};
 
@@ -31,7 +31,8 @@ impl Infer for Pattern {
 
                 Identifier(x) if x.starts_with(|c: char| c.is_ascii_uppercase()) => {
                     if ctx.lookup_cons(&x).is_some() {
-                        Self::new(self.location, PatternKind::Constructor(x, vec![]))
+                        PatternKind::Constructor(x, vec![])
+                            .loc(self.location)
                             .infer((ctx, vec, set))
                     } else {
                         ctx.new_error(format!("unbound constructor: {}", x))
@@ -39,7 +40,8 @@ impl Infer for Pattern {
                 }
 
                 Identifier(x) if ctx.lookup_cons(&x).is_some() => {
-                    Self::new(self.location, PatternKind::Constructor(x, vec![]))
+                    PatternKind::Constructor(x, vec![])
+                        .loc(self.location)
                         .infer((ctx, vec, set))
                 }
 
@@ -74,10 +76,10 @@ impl Infer for Pattern {
                     res
                 }
 
-                PathItem(ref path @ Path(_, ref item)) => ctx
+                PathItem(ref path @ Path(_, Located { location, ref data })) => ctx
                     .ctx_from_path(path, |ctx| {
-                        PatternKind::Atom(Identifier(item.data.clone()))
-                            .with_loc(item)
+                        PatternKind::Atom(Identifier(data.clone()))
+                            .loc(location)
                             .infer((ctx, vec.clone(), set))
                     })
                     .unwrap_or_else(|| ctx.infer_error()),

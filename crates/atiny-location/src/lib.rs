@@ -117,10 +117,6 @@ impl<T: Clone> Clone for Located<T> {
 }
 
 impl<T> Located<T> {
-    pub fn new(location: ByteRange, data: T) -> Self {
-        Self { location, data }
-    }
-
     pub fn map<R>(self, f: impl FnOnce(T) -> R) -> Located<R> {
         Located {
             location: self.location,
@@ -130,9 +126,9 @@ impl<T> Located<T> {
 }
 
 pub trait WithLoc: Sized {
-    fn with_loc<Any>(self, located: &Located<Any>) -> Located<Self> {
+    fn loc(self, location: ByteRange) -> Located<Self> {
         Located {
-            location: located.location,
+            location,
             data: self,
         }
     }

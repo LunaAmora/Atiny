@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+atiny-location = { path = "../atiny-location" }
 atiny-checker = { path = "../atiny-checker" }
 atiny-tree = { path = "../atiny-tree" }
 

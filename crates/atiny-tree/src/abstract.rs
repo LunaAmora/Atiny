@@ -4,7 +4,7 @@
 
 use std::fmt::{self, Display};
 
-use atiny_location::{ByteRange, Located, NodeId};
+use atiny_location::{ByteRange, Located, NodeId, WithLoc};
 use itertools::Itertools;
 
 use atiny_misc::SeqHelper;
@@ -162,8 +162,7 @@ impl ExprKind {
         let location = ByteRange(left.location.0, infix.location.1, id);
         let call = infix.map(|i| Self::Atom(AtomKind::Identifier(i.to_string())));
 
-        let data = Self::Application(Box::new(call), Box::new(left));
-        let app = Located { data, location };
+        let app = Self::Application(Box::new(call), Box::new(left)).loc(location);
 
         Self::Application(Box::new(app), Box::new(right))
     }
@@ -441,15 +440,15 @@ impl FnDecl {
         let loc = name.location;
         if params.is_empty() {
             params = vec![(
-                Located::new(loc, PatternKind::Atom(AtomKind::Wildcard)),
-                Located::new(loc, TypeKind::unit()),
+                PatternKind::Atom(AtomKind::Wildcard).loc(loc),
+                TypeKind::unit().loc(loc),
             )];
         }
 
         Self {
             name: name.data,
             params,
-            ret: ret.unwrap_or_else(|| Located::new(loc, TypeKind::unit())),
+            ret: ret.unwrap_or_else(|| TypeKind::unit().loc(loc)),
             body,
         }
     }

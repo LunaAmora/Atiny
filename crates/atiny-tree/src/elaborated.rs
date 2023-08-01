@@ -1,7 +1,9 @@
 //! This module defines a tree that contains semantic information. It's widely used for code
 //! generation and some expansions.
 
+use atiny_location::Located;
 use std::collections::{HashMap, VecDeque};
+
 use std::fmt::{Display, Formatter};
 #[derive(Debug, Clone)]
 pub struct Symbol(pub String);
@@ -31,27 +33,29 @@ impl<T> VariableNode<T> {
 
 #[derive(Debug)]
 pub enum Stmt<T> {
-    Let(CaseTreeNode, Expr<T>),
-    Expr(Expr<T>),
+    Let(CaseTreeNode, Elaborated<T>),
+    Expr(Elaborated<T>),
 }
+
+pub type Elaborated<T> = Located<Expr<T>>;
 
 #[derive(Debug)]
 pub enum Expr<T> {
     Number(u64),
-    Tuple(Vec<Self>),
+    Tuple(Vec<Elaborated<T>>),
 
     Variable(VariableNode<T>),
     Function(VariableNode<T>),
     Constructor(VariableNode<T>),
 
-    CaseTree(Box<Self>, CaseTree<T>),
+    CaseTree(Box<Elaborated<T>>, CaseTree<T>),
 
-    Abstraction(VecDeque<Labeled<T>>, Box<Self>, T),
-    Application(Box<Self>, Vec<Self>, T),
+    Abstraction(VecDeque<Labeled<T>>, Box<Elaborated<T>>, T),
+    Application(Box<Elaborated<T>>, Vec<Elaborated<T>>, T),
 
-    RecordCreation(Symbol, Vec<Labeled<Self>>),
-    RecordUpdate(Box<Self>, Vec<Labeled<Self>>),
-    RecordField(Symbol, Symbol, Box<Self>),
+    RecordCreation(Symbol, Vec<Labeled<Elaborated<T>>>),
+    RecordUpdate(Box<Elaborated<T>>, Vec<Labeled<Elaborated<T>>>),
+    RecordField(Symbol, Symbol, Box<Elaborated<T>>),
 
     Block(Vec<Stmt<T>>),
 
@@ -99,7 +103,7 @@ impl<T> Display for Accessor<T> {
 #[derive(Debug)]
 pub struct CaseTree<T> {
     pub accessors: Vec<HashMap<String, Vec<Accessor<T>>>>,
-    pub places: Vec<Expr<T>>,
+    pub places: Vec<Elaborated<T>>,
     pub tree: CaseTreeNode,
 }
 
