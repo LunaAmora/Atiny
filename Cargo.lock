@@ -109,6 +109,7 @@ name = "atiny-lowering"
 version = "0.1.0"
 dependencies = [
  "atiny-checker",
+ "atiny-error",
  "atiny-location",
  "atiny-tree",
 ]

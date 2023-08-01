@@ -1,7 +1,11 @@
+use atiny_checker::program::Program;
 use atiny_checker::types::{MonoType, Type};
+use atiny_error::{Error, ErrorCreation};
 use atiny_location::{ByteRange, WithLoc};
 use atiny_tree::elaborated::{CaseTree, CaseTreeNode, Elaborated, Expr, Symbol, VariableNode};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+
+use crate::walkable::Walkable;
 
 pub trait Visitor {
     fn visit_symbol(&mut self, _: &mut Symbol) {}
@@ -46,5 +50,59 @@ impl Visitor for PartialAppRemover {
 
         let application = std::mem::take(&mut expr.data);
         expr.data = Expr::Abstraction(symbols, Box::new(application.loc(loc)), abs_type);
+    }
+}
+
+pub struct ClosureMoveChecker(Program, ByteRange);
+
+impl ClosureMoveChecker {
+    pub fn new(prog: Program) -> Self {
+        Self(prog, ByteRange::default())
+    }
+}
+
+impl ErrorCreation for ClosureMoveChecker {
+    fn push_error(&self, error: Error) {
+        self.0.borrow_mut().errors.push(error);
+    }
+
+    fn location(&self) -> ByteRange {
+        self.1
+    }
+}
+
+impl Visitor for ClosureMoveChecker {
+    fn visit_abstraction(&mut self, abs: &mut Elaborated<Type>) {
+        let Expr::Abstraction(args, expr, _) = &mut abs.data else {
+            unreachable!()
+        };
+
+        let mut visitor = CollectLocalVars::default();
+        expr.walk(&mut visitor);
+
+        for symbol in args.iter().map(|(s, _)| s) {
+            visitor.0.remove(symbol);
+        }
+
+        if !visitor.0.is_empty() {
+            abs.data = Expr::Error;
+
+            for (free, loc) in visitor.0 {
+                self.1 = loc;
+                self.error(format!(
+                    "free variables can not move into closures yet: '{}'",
+                    free
+                ));
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct CollectLocalVars(HashMap<Symbol, ByteRange>);
+
+impl Visitor for CollectLocalVars {
+    fn visit_variable(&mut self, var: &mut VariableNode<Type>, loc: ByteRange) {
+        self.0.insert(var.name.clone(), loc);
     }
 }

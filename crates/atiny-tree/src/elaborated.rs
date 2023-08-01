@@ -3,9 +3,9 @@
 
 use atiny_location::Located;
 use std::collections::{HashMap, VecDeque};
-
 use std::fmt::{Display, Formatter};
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Symbol(pub String);
 
 impl Display for Symbol {
