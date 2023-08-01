@@ -12,6 +12,7 @@ atiny-tree = {path = "../atiny-tree" }
 atiny-error = {path = "../atiny-error" }
 atiny-parser = {path = "../atiny-parser" }
 atiny-checker = {path = "../atiny-checker" }
+atiny-lowering = {path = "../atiny-lowering" }
 
 proc-macro2 = "1.0.63"
 quote = "1.0.29"

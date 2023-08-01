@@ -1,4 +1,4 @@
-use atiny_checker::types::Type;
+use atiny_checker::{infer::top_level::FnBody, program::Program, types::Type};
 use atiny_tree::elaborated::{CaseTreeNode, Elaborated, Expr, Stmt};
 
 use crate::visitors::Visitor;
@@ -135,5 +135,26 @@ impl Walkable for CaseTreeNode {
                 s.tree.walk(visitor);
             }
         }
+    }
+}
+
+impl Walkable for Program {
+    fn walk<V: Visitor>(&mut self, visitor: &mut V) {
+        let mut elab = { std::mem::take(&mut self.borrow_mut().elaborated) };
+
+        for (_, bodies) in elab.iter_mut() {
+            for body in bodies {
+                body.walk(visitor);
+            }
+        }
+
+        self.borrow_mut().elaborated = elab;
+    }
+}
+
+impl Walkable for FnBody {
+    fn walk<V: Visitor>(&mut self, visitor: &mut V) {
+        let Self(_, body) = self;
+        body.walk(visitor);
     }
 }

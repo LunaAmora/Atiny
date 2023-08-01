@@ -8,6 +8,8 @@ use std::path::PathBuf;
 
 use atiny_checker::infer::Infer;
 use atiny_checker::program::Program;
+use atiny_lowering::visitors::{ClosureMoveChecker, PartialAppRemover};
+use atiny_lowering::walkable::Walkable;
 use clap::Parser;
 
 #[derive(Parser)]
@@ -21,11 +23,13 @@ fn main() {
 
     Program::new(file).map_or_else(
         |err| println!("IO error: {}", err),
-        |program| {
+        |mut program| {
             let _ = program
                 .get_entry(|ctx, parsed: Option<Vec<_>>| parsed.infer(ctx))
                 .infer(program.clone());
 
+            program.walk(&mut PartialAppRemover);
+            program.walk(&mut ClosureMoveChecker::new(program.clone()));
             program.print_errors();
         },
     );

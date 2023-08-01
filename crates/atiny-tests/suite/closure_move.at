@@ -1,0 +1,5 @@
+fn main : Int {
+    let z = 2;
+    let s = 4;
+    |a| { a + z + s } 1
+}

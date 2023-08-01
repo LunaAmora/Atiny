@@ -138,6 +138,7 @@ dependencies = [
  "atiny-checker",
  "atiny-error",
  "atiny-location",
+ "atiny-lowering",
  "atiny-parser",
  "atiny-tree",
  "itertools",
