@@ -153,6 +153,16 @@ impl Ctx {
         format!("'{}", (97 + ((counter - 1) % 26)) as u8 as char)
     }
 
+    pub fn generate_name(&self, name: &str) -> String {
+        let counter = {
+            let mut counter = self.counter.borrow_mut();
+            *counter += 1;
+            *counter
+        };
+
+        format!("{}{}", name, counter)
+    }
+
     /// Looks up a type variable name in the context.
     pub fn lookup(&self, name: &str) -> Option<(VariableKind, Rc<TypeScheme>)> {
         self.map

@@ -128,9 +128,8 @@ impl<T> Walkable<T> for CaseTreeNode {
         visitor.visit_case_tree_node(self);
 
         if let Self::Node(v) = self {
-            for (sym, case_tree) in v.iter_mut() {
-                visitor.visit_symbol(sym);
-                case_tree.walk(visitor);
+            for s in v.iter_mut() {
+                s.tree.walk(visitor);
             }
         }
     }

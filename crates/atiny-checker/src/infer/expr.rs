@@ -118,12 +118,13 @@ impl Infer for &Expr {
                 let ret_ty = ctx.new_hole();
 
                 let mut places = Vec::new();
+                let mut accessors = Vec::new();
 
                 for c in clauses {
-                    let mut set = HashSet::new();
+                    let mut set = HashMap::new();
                     let pat_loc = c.pat.location;
 
-                    let clause_pat = c.pat.clone().infer((&mut ctx, &mut set));
+                    let clause_pat = c.pat.clone().infer((&mut ctx, vec![], &mut set));
                     ctx.set_position(pat_loc);
 
                     unify(ctx.clone(), pat_ty.clone(), clause_pat);
@@ -131,6 +132,8 @@ impl Infer for &Expr {
                     let (right, elaborated) = c.expr.infer(ctx.clone());
 
                     unify(ctx.clone(), ret_ty.clone(), right);
+
+                    accessors.push(set);
                     places.push(elaborated);
                 }
 
@@ -173,7 +176,16 @@ impl Infer for &Expr {
                             ctx.suggestion(format!("{} => _,", err), SugestionKind::Insert);
                             Elaborated::Error
                         },
-                        |tree| Elaborated::CaseTree(Box::new(scrutinee), CaseTree { tree, places }),
+                        |tree| {
+                            Elaborated::CaseTree(
+                                Box::new(scrutinee),
+                                CaseTree {
+                                    tree,
+                                    places,
+                                    accessors,
+                                },
+                            )
+                        },
                     )
                 } else {
                     Elaborated::Error

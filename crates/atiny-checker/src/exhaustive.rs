@@ -10,7 +10,7 @@ use std::{
 };
 
 use atiny_location::ByteRange;
-use atiny_tree::elaborated::{CaseTreeNode, Symbol};
+use atiny_tree::elaborated::{CaseTreeNode, Switch};
 use atiny_tree::r#abstract::*;
 use itertools::Itertools;
 
@@ -267,6 +267,7 @@ impl Matrix {
 #[derive(Clone)]
 pub struct Problem {
     typ: Vec<Type>,
+    scrutinee: Vec<String>,
     case: Row,
     matrix: Matrix,
 }
@@ -308,6 +309,7 @@ impl Problem {
         Self {
             typ: vec![typ],
             case: Row(None, useful),
+            scrutinee: vec!["$gen".to_string()],
             matrix: Matrix::from_column(columns),
         }
     }
@@ -332,11 +334,12 @@ impl Problem {
         type_args: &[Type],
         constructor: Rc<ConstructorSignature>,
         pat: Vec<Pattern>,
+        scrutinee: Vec<String>,
     ) -> Witness {
         let generalized = constructor.typ.instantiate_with(type_args);
         let arg_count = constructor.args.len();
         let case = Case::Constructor(constructor, vec![(); arg_count]);
-        self.specialize(ctx, generalized.iter(), pat, case)
+        self.specialize(ctx, generalized.iter(), pat, case, scrutinee)
     }
 
     /// Splits a problem into multiple by looking at the type of the problem and the name of the
@@ -353,11 +356,17 @@ impl Problem {
 
                 for constructor in sum {
                     let len = constructor.args.len();
+
+                    let names = (0..len)
+                        .map(|_| ctx.generate_name("$gen"))
+                        .collect::<Vec<_>>();
+
                     let witness = self.clone().specialize_cons(
                         ctx,
                         type_args,
                         constructor.clone(),
                         vec![wildcard(); len],
+                        names.clone(),
                     );
 
                     let name = &constructor.name;
@@ -365,7 +374,14 @@ impl Problem {
                     if witness.is_non_exhaustive() {
                         return witness.expand(len, Some(name.clone()));
                     } else if let Witness::Ok(tree) = witness {
-                        nodes.push((Symbol(name.clone()), tree));
+                        let switch = Switch {
+                            var: self.scrutinee[0].clone(),
+                            names,
+                            cons: name.clone(),
+                            tree,
+                        };
+
+                        nodes.push(switch);
                     }
                 }
 
@@ -391,6 +407,7 @@ impl Problem {
             typ: self.typ[1..].to_vec(),
             case: self.case.pop_front(),
             matrix: self.matrix.specialize(ctx, Case::Wildcard),
+            scrutinee: self.scrutinee[1..].to_vec(),
         }
     }
 
@@ -452,7 +469,14 @@ impl Problem {
         witness.add_pattern(wildcard())
     }
 
-    fn specialize<T, P>(self, ctx: &Ctx, types: T, pat: P, case: Case<()>) -> Witness
+    fn specialize<T, P>(
+        self,
+        ctx: &Ctx,
+        types: T,
+        pat: P,
+        case: Case<()>,
+        scrutinee: Vec<String>,
+    ) -> Witness
     where
         T: IntoIterator<Item = Type>,
         P: IntoIterator<Item = Pattern>,
@@ -464,6 +488,7 @@ impl Problem {
                 .collect(),
             case: self.case.inline(pat),
             matrix: self.matrix.specialize(ctx, case),
+            scrutinee,
         };
 
         specialized.exhaustiveness(ctx)
@@ -571,11 +596,13 @@ impl Problem {
 
             (Case::Wildcard, MonoType::Tuple(types)) => {
                 let len = types.len();
+
                 let witness = self.specialize(
                     ctx,
                     types.clone(),
                     vec![wildcard(); len],
                     Case::Tuple(vec![(); len]),
+                    (0..len).map(|_| ctx.generate_name("$GEN")).collect_vec(),
                 );
 
                 if witness.is_non_exhaustive() {
@@ -588,14 +615,27 @@ impl Problem {
             (Case::Wildcard, _) => self.specialize_wildcard(ctx),
 
             (Case::Constructor(cons, pat), MonoType::Application(_, args)) => {
-                self.specialize_cons(ctx, args, cons, pat)
+                let names = (0..pat.len())
+                    .map(|_| ctx.generate_name("$GEN"))
+                    .collect_vec();
+                self.specialize_cons(ctx, args, cons, pat, names)
             }
 
             (Case::Tuple(pat), MonoType::Tuple(types)) => {
-                self.specialize(ctx, types.clone(), pat, Case::Tuple(vec![(); types.len()]))
+                let names = (0..pat.len())
+                    .map(|_| ctx.generate_name("$GEN"))
+                    .collect_vec();
+
+                self.specialize(
+                    ctx,
+                    types.clone(),
+                    pat,
+                    Case::Tuple(vec![(); types.len()]),
+                    names,
+                )
             }
 
-            (Case::Int(n), _) => self.specialize(ctx, None, None, Case::Int(n)),
+            (Case::Int(n), _) => self.specialize(ctx, None, None, Case::Int(n), vec![]),
 
             _ => unimplemented!(),
         }
