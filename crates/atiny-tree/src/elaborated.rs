@@ -112,8 +112,16 @@ pub struct Switch {
 }
 
 #[derive(Debug)]
+pub struct Tuple {
+    pub var: String,
+    pub names: Vec<String>,
+    pub tree: CaseTreeNode,
+}
+
+#[derive(Debug)]
 pub enum CaseTreeNode {
     Node(Vec<Switch>),
+    Tuple(Box<Tuple>),
     Leaf(usize),
 }
 
@@ -134,6 +142,16 @@ impl CaseTreeNode {
                 }
             }
             Self::Leaf(index) => writeln!(f, "{:indent$}{index}", "")?,
+            Self::Tuple(tuple) => {
+                writeln!(
+                    f,
+                    "{:indent$}({}) = ({})",
+                    "",
+                    tuple.var,
+                    tuple.names.join(", ")
+                )?;
+                tuple.tree.render_indented(f, indent + 2)?;
+            }
         }
         Ok(())
     }

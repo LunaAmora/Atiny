@@ -177,6 +177,7 @@ impl Infer for &Expr {
                             Elaborated::Error
                         },
                         |tree| {
+                            println!("{}", tree);
                             Elaborated::CaseTree(
                                 Box::new(scrutinee),
                                 CaseTree {

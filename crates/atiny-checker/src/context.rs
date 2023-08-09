@@ -55,7 +55,7 @@ pub struct Ctx {
     pub id: NodeId,
     pub program: Program,
     pub imports: Rc<RefCell<im_rc::HashMap<NodeId, Imports>>>,
-    counter: Rc<RefCell<usize>>,
+    pub counter: Rc<RefCell<usize>>,
     pub map: im_rc::OrdMap<String, (VariableKind, Rc<TypeScheme>)>,
     pub typ_map: im_rc::OrdSet<String>,
     pub location: RefCell<ByteRange>,

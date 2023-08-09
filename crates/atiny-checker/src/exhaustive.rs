@@ -10,7 +10,7 @@ use std::{
 };
 
 use atiny_location::ByteRange;
-use atiny_tree::elaborated::{CaseTreeNode, Switch};
+use atiny_tree::elaborated::{CaseTreeNode, Switch, Tuple};
 use atiny_tree::r#abstract::*;
 use itertools::Itertools;
 
@@ -488,7 +488,10 @@ impl Problem {
                 .collect(),
             case: self.case.inline(pat),
             matrix: self.matrix.specialize(ctx, case),
-            scrutinee,
+            scrutinee: scrutinee
+                .into_iter()
+                .chain(self.scrutinee.into_iter().skip(1))
+                .collect(),
         };
 
         specialized.exhaustiveness(ctx)
@@ -597,18 +600,31 @@ impl Problem {
             (Case::Wildcard, MonoType::Tuple(types)) => {
                 let len = types.len();
 
+                let var = self.scrutinee[0].clone();
+
+                let scrutinee = (0..len).map(|_| ctx.generate_name("$gen")).collect_vec();
+
                 let witness = self.specialize(
                     ctx,
                     types.clone(),
                     vec![wildcard(); len],
                     Case::Tuple(vec![(); len]),
-                    (0..len).map(|_| ctx.generate_name("$GEN")).collect_vec(),
+                    scrutinee.clone(),
                 );
 
-                if witness.is_non_exhaustive() {
+                let witness = if witness.is_non_exhaustive() {
                     witness.expand(len, None)
                 } else {
                     witness
+                };
+
+                match witness {
+                    Witness::Ok(tree) => Witness::Ok(CaseTreeNode::Tuple(Box::new(Tuple {
+                        var,
+                        names: scrutinee,
+                        tree,
+                    }))),
+                    Witness::NonExhaustive(_) => todo!(),
                 }
             }
 
