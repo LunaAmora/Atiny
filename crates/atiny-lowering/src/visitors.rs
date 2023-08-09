@@ -1,6 +1,6 @@
 use atiny_checker::program::Program;
 use atiny_checker::types::{MonoType, Type};
-use atiny_error::{Error, ErrorCreation};
+use atiny_error::{Error, ErrorBuilder};
 use atiny_location::{ByteRange, WithLoc};
 use atiny_tree::elaborated::{CaseTree, CaseTreeNode, Elaborated, Expr, Symbol, VariableNode};
 use indexmap::IndexMap;
@@ -62,7 +62,7 @@ impl ClosureMoveChecker {
     }
 }
 
-impl ErrorCreation for ClosureMoveChecker {
+impl ErrorBuilder for ClosureMoveChecker {
     fn push_error(&self, error: Error) {
         self.0.borrow_mut().errors.push(error);
     }

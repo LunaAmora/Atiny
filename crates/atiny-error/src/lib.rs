@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use atiny_location::{ByteRange, NodeId, Point, Range};
 
-pub trait ErrorCreation {
+pub trait ErrorBuilder {
     fn push_error(&self, error: Error);
     fn location(&self) -> ByteRange;
 

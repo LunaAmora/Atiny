@@ -7,7 +7,7 @@ use crate::exhaustive::Problem;
 use crate::types::{MonoType, Type, TypeScheme, TypeSignature, TypeValue};
 use crate::unify::unify;
 
-use atiny_error::{ErrorCreation, SugestionKind};
+use atiny_error::{ErrorBuilder, SugestionKind};
 use atiny_location::{Located, WithLoc};
 use atiny_tree::elaborated::{self, CaseTree, Stmt, Symbol, VariableNode};
 use atiny_tree::r#abstract::*;

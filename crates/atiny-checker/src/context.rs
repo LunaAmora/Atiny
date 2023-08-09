@@ -3,7 +3,7 @@
 
 use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use atiny_error::{Error, ErrorCreation};
+use atiny_error::{Error, ErrorBuilder};
 use atiny_location::{ByteRange, Located, NodeId};
 use atiny_tree::r#abstract::{Path, TypeDecl};
 use itertools::Itertools;
@@ -345,7 +345,7 @@ impl Ctx {
     }
 }
 
-impl ErrorCreation for Ctx {
+impl ErrorBuilder for Ctx {
     fn push_error(&self, error: Error) {
         self.program.borrow_mut().errors.push(error);
     }
