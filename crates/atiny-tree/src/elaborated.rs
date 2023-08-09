@@ -1,9 +1,8 @@
 //! This module defines a tree that contains semantic information. It's widely used for code
 //! generation and some expansions.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::{Display, Formatter};
-
 #[derive(Debug, Clone)]
 pub struct Symbol(pub String);
 
@@ -65,15 +64,64 @@ impl<T> Default for Expr<T> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum Accessor<T> {
+    Field(T, Symbol, usize),
+    Index(T, usize),
+}
+
+pub trait AccessorExt<T> {
+    fn with_field(self, typ: T, cons: Symbol, field: usize) -> Self;
+    fn with_index(self, typ: T, index: usize) -> Self;
+}
+
+impl<T> AccessorExt<T> for Vec<Accessor<T>> {
+    fn with_field(mut self, typ: T, cons: Symbol, field: usize) -> Self {
+        self.push(Accessor::Field(typ, cons, field));
+        self
+    }
+
+    fn with_index(mut self, typ: T, index: usize) -> Self {
+        self.push(Accessor::Index(typ, index));
+        self
+    }
+}
+
+impl<T> Display for Accessor<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Field(_, record, field) => write!(f, "({}){}", record, field),
+            Self::Index(_, record) => write!(f, "{}", record),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CaseTree<T> {
+    pub accessors: Vec<HashMap<String, Vec<Accessor<T>>>>,
     pub places: Vec<Expr<T>>,
     pub tree: CaseTreeNode,
 }
 
 #[derive(Debug)]
+pub struct Switch {
+    pub var: String,
+    pub names: Vec<String>,
+    pub cons: String,
+    pub tree: CaseTreeNode,
+}
+
+#[derive(Debug)]
+pub struct Tuple {
+    pub var: String,
+    pub names: Vec<String>,
+    pub tree: CaseTreeNode,
+}
+
+#[derive(Debug)]
 pub enum CaseTreeNode {
-    Node(Vec<Labeled<CaseTreeNode>>),
+    Node(Vec<Switch>),
+    Tuple(Box<Tuple>),
     Leaf(usize),
 }
 
@@ -81,12 +129,29 @@ impl CaseTreeNode {
     pub fn render_indented(&self, f: &mut Formatter<'_>, indent: usize) -> std::fmt::Result {
         match self {
             Self::Node(vec) => {
-                for (name, tree) in vec {
-                    writeln!(f, "{:indent$}{name}:", "")?;
-                    tree.render_indented(f, indent + 2)?;
+                for switch in vec {
+                    writeln!(
+                        f,
+                        "{:indent$}{} = {}({}):",
+                        "",
+                        switch.var,
+                        switch.cons,
+                        switch.names.join(", ")
+                    )?;
+                    switch.tree.render_indented(f, indent + 2)?;
                 }
             }
             Self::Leaf(index) => writeln!(f, "{:indent$}{index}", "")?,
+            Self::Tuple(tuple) => {
+                writeln!(
+                    f,
+                    "{:indent$}({}) = ({})",
+                    "",
+                    tuple.var,
+                    tuple.names.join(", ")
+                )?;
+                tuple.tree.render_indented(f, indent + 2)?;
+            }
         }
         Ok(())
     }

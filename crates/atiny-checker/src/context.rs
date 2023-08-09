@@ -55,7 +55,7 @@ pub struct Ctx {
     pub id: NodeId,
     pub program: Program,
     pub imports: Rc<RefCell<im_rc::HashMap<NodeId, Imports>>>,
-    counter: Rc<RefCell<usize>>,
+    pub counter: Rc<RefCell<usize>>,
     pub map: im_rc::OrdMap<String, (VariableKind, Rc<TypeScheme>)>,
     pub typ_map: im_rc::OrdSet<String>,
     pub location: RefCell<ByteRange>,
@@ -151,6 +151,16 @@ impl Ctx {
         };
 
         format!("'{}", (97 + ((counter - 1) % 26)) as u8 as char)
+    }
+
+    pub fn generate_name(&self, name: &str) -> String {
+        let counter = {
+            let mut counter = self.counter.borrow_mut();
+            *counter += 1;
+            *counter
+        };
+
+        format!("{}{}", name, counter)
     }
 
     /// Looks up a type variable name in the context.

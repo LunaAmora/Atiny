@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::Infer;
 use crate::context::{Ctx, InferError, VariableKind};
 use crate::exhaustive::{Problem, Witness};
@@ -5,14 +7,18 @@ use crate::types::{MonoType, Type};
 use crate::unify::unify;
 
 use atiny_location::WithLoc;
+use atiny_tree::elaborated::{Accessor, AccessorExt, Symbol};
 use atiny_tree::r#abstract::{wildcard, AtomKind, Path, Pattern, PatternKind};
-use std::collections::HashSet;
 
 impl Infer for Pattern {
-    type Context<'a> = (&'a mut Ctx, &'a mut HashSet<String>);
+    type Context<'a> = (
+        &'a mut Ctx,
+        Vec<Accessor<Type>>,
+        &'a mut HashMap<String, Vec<Accessor<Type>>>,
+    );
     type Return = Type;
 
-    fn infer(self, (ctx, set): Self::Context<'_>) -> Self::Return {
+    fn infer(self, (ctx, vec, set): Self::Context<'_>) -> Self::Return {
         use AtomKind::*;
         ctx.set_position(self.location);
         let id = ctx.id;
@@ -26,39 +32,60 @@ impl Infer for Pattern {
                 Identifier(x) if x.starts_with(|c: char| c.is_ascii_uppercase()) => {
                     if ctx.lookup_cons(&x).is_some() {
                         Self::new(self.location, PatternKind::Constructor(x, vec![]))
-                            .infer((ctx, set))
+                            .infer((ctx, vec, set))
                     } else {
                         ctx.new_error(format!("unbound constructor: {}", x))
                     }
                 }
 
                 Identifier(x) if ctx.lookup_cons(&x).is_some() => {
-                    Self::new(self.location, PatternKind::Constructor(x, vec![])).infer((ctx, set))
+                    Self::new(self.location, PatternKind::Constructor(x, vec![]))
+                        .infer((ctx, vec, set))
                 }
 
-                Identifier(x) if set.insert(x.to_owned()) => {
+                Identifier(x) => {
+                    if set.insert(x.to_owned(), vec).is_none() {
+                        let hole = ctx.new_hole();
+                        ctx.map.insert(x, (VariableKind::Local, hole.to_poly()));
+                        hole
+                    } else {
+                        ctx.new_error(format!("identifier '{}' bound more than once", x))
+                    }
+                }
+
+                Tuple(parts) => {
                     let hole = ctx.new_hole();
-                    ctx.map.insert(x, (VariableKind::Local, hole.to_poly()));
-                    hole
+
+                    let res = Type::new(
+                        MonoType::Tuple(
+                            parts
+                                .into_iter()
+                                .enumerate()
+                                .map(|(index, pat)| {
+                                    let with_index = vec.clone().with_index(hole.clone(), index);
+                                    pat.infer((ctx, with_index, set))
+                                })
+                                .collect(),
+                        ),
+                        id,
+                    );
+
+                    unify(ctx.clone(), res.clone(), hole);
+                    res
                 }
-
-                Identifier(x) => ctx.new_error(format!("identifier '{}' bound more than once", x)),
-
-                Tuple(vec) => Type::new(
-                    MonoType::Tuple(vec.into_iter().map(|pat| pat.infer((ctx, set))).collect()),
-                    id,
-                ),
 
                 PathItem(ref path @ Path(_, ref item)) => ctx
                     .ctx_from_path(path, |ctx| {
                         PatternKind::Atom(Identifier(item.data.clone()))
                             .with_loc(item)
-                            .infer((ctx, set))
+                            .infer((ctx, vec.clone(), set))
                     })
                     .unwrap_or_else(|| ctx.infer_error()),
             },
 
             PatternKind::Constructor(name, args) => {
+                let hole = ctx.new_hole();
+
                 let Some(constructor) = ctx.lookup_cons(&name) else {
                     return ctx.new_error(format!("unbound constructor '{}'", name));
                 };
@@ -74,8 +101,12 @@ impl Infer for Pattern {
 
                 let (mut typ, _) = constructor.typ.instantiate(ctx.clone());
 
-                for pat in args {
-                    let pat_ty = pat.infer((ctx, set));
+                for (index, pat) in args.into_iter().enumerate() {
+                    let vec = vec
+                        .clone()
+                        .with_field(hole.clone(), Symbol(name.clone()), index);
+
+                    let pat_ty = pat.infer((ctx, vec, set));
 
                     let MonoType::Arrow(left, right) = &*typ else {
                         unreachable!("impossible branch when matching constructor arguments")
@@ -85,6 +116,7 @@ impl Infer for Pattern {
                     typ = right.clone();
                 }
 
+                unify(ctx.clone(), typ.clone(), hole);
                 typ
             }
         }
@@ -93,8 +125,8 @@ impl Infer for Pattern {
 
 impl Ctx {
     pub fn single_exhaustiveness(&mut self, pattern: &Pattern, pattern_type: Type) -> Witness {
-        let mut set = HashSet::new();
-        let cons_pat = pattern.clone().infer((self, &mut set));
+        let mut set = HashMap::new();
+        let cons_pat = pattern.clone().infer((self, vec![], &mut set));
 
         unify(self.clone(), cons_pat.clone(), pattern_type.clone());
         self.extend_with_pattern(pattern, pattern_type);
