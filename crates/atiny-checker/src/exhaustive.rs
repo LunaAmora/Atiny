@@ -624,7 +624,7 @@ impl Problem {
                         names: scrutinee,
                         tree,
                     }))),
-                    Witness::NonExhaustive(_) => todo!(),
+                    Witness::NonExhaustive(_) => witness,
                 }
             }
 
