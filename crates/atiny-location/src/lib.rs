@@ -126,7 +126,7 @@ impl<T> Located<T> {
 }
 
 pub trait WithLoc: Sized {
-    fn loc(self, location: ByteRange) -> Located<Self> {
+    fn with_loc(self, location: ByteRange) -> Located<Self> {
         Located {
             location,
             data: self,

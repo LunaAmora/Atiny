@@ -117,7 +117,7 @@ Block: Vec<Statement> = BlockList<";", Loc<Statement>>;
 
 BlockExpr: ExprKind = Loc<Block> => ExprKind::Block(if <>.data.is_empty() {
     let loc = <>.location;
-    vec![StatementKind::Expr(ExprKind::Atom(AtomKind::unit()).loc(loc)).loc(loc)]
+    vec![StatementKind::Expr(ExprKind::Atom(AtomKind::unit()).with_loc(loc)).with_loc(loc)]
 } else {
     <>.data
 });

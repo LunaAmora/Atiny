@@ -162,7 +162,7 @@ impl ExprKind {
         let location = ByteRange(left.location.0, infix.location.1, id);
         let call = infix.map(|i| Self::Atom(AtomKind::Identifier(i.to_string())));
 
-        let app = Self::Application(Box::new(call), Box::new(left)).loc(location);
+        let app = Self::Application(Box::new(call), Box::new(left)).with_loc(location);
 
         Self::Application(Box::new(app), Box::new(right))
     }
@@ -440,15 +440,15 @@ impl FnDecl {
         let loc = name.location;
         if params.is_empty() {
             params = vec![(
-                PatternKind::Atom(AtomKind::Wildcard).loc(loc),
-                TypeKind::unit().loc(loc),
+                PatternKind::Atom(AtomKind::Wildcard).with_loc(loc),
+                TypeKind::unit().with_loc(loc),
             )];
         }
 
         Self {
             name: name.data,
             params,
-            ret: ret.unwrap_or_else(|| TypeKind::unit().loc(loc)),
+            ret: ret.unwrap_or_else(|| TypeKind::unit().with_loc(loc)),
             body,
         }
     }

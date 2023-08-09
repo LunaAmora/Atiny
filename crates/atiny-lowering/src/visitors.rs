@@ -42,7 +42,7 @@ impl Visitor for PartialAppRemover {
             let symbol = Symbol(format!("_gen{}", symbols.len() + 1));
             symbols.push_front((symbol.clone(), current.clone()));
 
-            args.push(Expr::Variable(VariableNode::new(symbol)).loc(loc));
+            args.push(Expr::Variable(VariableNode::new(symbol)).with_loc(loc));
         }
 
         if symbols.is_empty() {
@@ -50,7 +50,7 @@ impl Visitor for PartialAppRemover {
         }
 
         let application = std::mem::take(&mut expr.data);
-        expr.data = Expr::Abstraction(symbols, Box::new(application.loc(loc)), abs_type);
+        expr.data = Expr::Abstraction(symbols, Box::new(application.with_loc(loc)), abs_type);
     }
 }
 

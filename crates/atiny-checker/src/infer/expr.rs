@@ -33,11 +33,14 @@ impl Infer for &Expr {
             Atom(a) => match a {
                 Wildcard => ctx.new_error("`_` may only appear on patterns".to_string()),
 
-                Number(n) => (Type::typ("Int".to_string(), id), Elab::Number(*n).loc(loc)),
+                Number(n) => (
+                    Type::typ("Int".to_string(), id),
+                    Elab::Number(*n).with_loc(loc),
+                ),
 
                 Tuple(vec) => {
                     let (typ, el) = vec.iter().map(|expr| expr.infer(ctx.clone())).unzip();
-                    (Type::tuple(typ, id), Elab::Tuple(el).loc(loc))
+                    (Type::tuple(typ, id), Elab::Tuple(el).with_loc(loc))
                 }
 
                 Identifier(x) => match ctx.lookup(x) {
@@ -55,7 +58,7 @@ impl Infer for &Expr {
                             VariableKind::Local => Elab::Variable(variable_node),
                         };
 
-                        (inst, expr.loc(loc))
+                        (inst, expr.with_loc(loc))
                     }
 
                     None => ctx.new_error(format!("unbound variable '{}'", x)),
@@ -64,7 +67,7 @@ impl Infer for &Expr {
                 PathItem(path @ Path(_, Located { location, data })) => ctx
                     .ctx_from_path(path, |ctx| {
                         Atom(Identifier(data.clone()))
-                            .loc(*location)
+                            .with_loc(*location)
                             .infer(ctx.clone())
                     })
                     .unwrap_or_else(|| ctx.infer_error()),
@@ -87,7 +90,7 @@ impl Infer for &Expr {
                         elab_fun
                     }
                     _ => Elab::Application(Box::new(elab_fun), vec![elab_arg], t_ret.clone())
-                        .loc(loc),
+                        .with_loc(loc),
                 };
 
                 (t_ret, appl)
@@ -109,7 +112,7 @@ impl Infer for &Expr {
                         elab_body
                     }
                     _ => Elab::Abstraction([symbol].into(), Box::new(elab_body), t_ret.clone())
-                        .loc(loc),
+                        .with_loc(loc),
                 };
 
                 (t_ret, abs)
@@ -195,7 +198,7 @@ impl Infer for &Expr {
                     Elab::Error
                 };
 
-                (ret_ty, elaborated.loc(loc))
+                (ret_ty, elaborated.with_loc(loc))
             }
 
             Annotation(expr, typ) => {
@@ -216,7 +219,7 @@ impl Infer for &Expr {
 
                     let elaborated = record.infer((&ctx, name, user_fields));
 
-                    (ret, elaborated.loc(loc))
+                    (ret, elaborated.with_loc(loc))
                 }
 
                 Atom(AtomKind::PathItem(path @ Path(_, item))) => {
@@ -236,7 +239,7 @@ impl Infer for &Expr {
                     ctx.set_position(expr.location);
                     let elaborated = record.infer((&ctx, name, user_fields));
 
-                    (ret, elaborated.loc(loc))
+                    (ret, elaborated.with_loc(loc))
                 }
 
                 _ => {
@@ -245,7 +248,7 @@ impl Infer for &Expr {
 
                     let Some((ret_type, record)) = ctx.get_record_info(&expr_ty) else {
                         ctx.error(format!("the type '{expr_ty}' is not a record"));
-                        return (expr_ty, Elab::Error.loc(loc));
+                        return (expr_ty, Elab::Error.with_loc(loc));
                     };
 
                     unify(ctx.clone(), ret_type.clone(), expr_ty);
@@ -258,7 +261,7 @@ impl Infer for &Expr {
                         Elab::RecordUpdate(Box::new(elab_expr), elab_fields)
                     };
 
-                    (ret_type, elaborated.loc(loc))
+                    (ret_type, elaborated.with_loc(loc))
                 }
             },
 
@@ -292,12 +295,12 @@ impl Infer for &Expr {
                     Box::new(elab_expr),
                 );
 
-                (field_ty, record_field.loc(loc))
+                (field_ty, record_field.with_loc(loc))
             }
 
             Block(statements) => {
                 let (ty, elab) = statements.infer(ctx);
-                (ty, elab.loc(loc))
+                (ty, elab.with_loc(loc))
             }
         }
     }
@@ -480,7 +483,7 @@ impl InferError<(Type, Elaborated)> for Ctx {
     fn infer_error(&self) -> (Type, Elaborated) {
         (
             Type::new(MonoType::Error, self.id),
-            Elab::Error.loc(*self.location.borrow()),
+            Elab::Error.with_loc(*self.location.borrow()),
         )
     }
 }

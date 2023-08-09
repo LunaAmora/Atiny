@@ -76,7 +76,7 @@ impl Infer for &TypeNode {
             TypeKind::Path(path @ Path(_, Located { location, data })) => ctx
                 .ctx_from_path(path, |ctx| {
                     TypeKind::Variable(VariableNode { name: data.clone() })
-                        .loc(*location)
+                        .with_loc(*location)
                         .infer(ctx.clone())
                 })
                 .unwrap_or_else(|| ctx.infer_error()),

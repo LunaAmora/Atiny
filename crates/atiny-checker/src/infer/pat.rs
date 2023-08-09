@@ -32,7 +32,7 @@ impl Infer for Pattern {
                 Identifier(x) if x.starts_with(|c: char| c.is_ascii_uppercase()) => {
                     if ctx.lookup_cons(&x).is_some() {
                         PatternKind::Constructor(x, vec![])
-                            .loc(self.location)
+                            .with_loc(self.location)
                             .infer((ctx, vec, set))
                     } else {
                         ctx.new_error(format!("unbound constructor: {}", x))
@@ -41,7 +41,7 @@ impl Infer for Pattern {
 
                 Identifier(x) if ctx.lookup_cons(&x).is_some() => {
                     PatternKind::Constructor(x, vec![])
-                        .loc(self.location)
+                        .with_loc(self.location)
                         .infer((ctx, vec, set))
                 }
 
@@ -79,7 +79,7 @@ impl Infer for Pattern {
                 PathItem(ref path @ Path(_, Located { location, ref data })) => ctx
                     .ctx_from_path(path, |ctx| {
                         PatternKind::Atom(Identifier(data.clone()))
-                            .loc(location)
+                            .with_loc(location)
                             .infer((ctx, vec.clone(), set))
                     })
                     .unwrap_or_else(|| ctx.infer_error()),
