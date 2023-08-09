@@ -1,6 +1,6 @@
-use Lib::List
-use Lib::Bool
-use Lib::OtherThing
+use ImportsLib::List
+use ImportsLib::Bool
+use ImportsLib::OtherThing
 
 type Something = {
     value: List Bool

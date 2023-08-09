@@ -62,9 +62,9 @@ pub trait VirtualFileSystem<T: VirtualFile, E: Error> {
     fn add_dir(&mut self, name: String, parent: Option<NodeId>) -> Result<NodeId, E>;
     fn add_node(&mut self, node: Node, name: String, parent: Option<NodeId>) -> Result<NodeId, E>;
 
-    fn get_file_relative(&mut self, path: &str, node_id: NodeId) -> Result<File, E>;
-    fn get_file_from_path(&mut self, path: &str, parent: Option<NodeId>) -> Result<File, E>;
-    fn read_file(&mut self, path: &str, parent: Option<NodeId>) -> Result<File, E>;
+    fn get_file_relative(&mut self, path: String, node_id: NodeId) -> Result<File, E>;
+    fn get_file_from_path(&mut self, path: String, parent: Option<NodeId>) -> Result<File, E>;
+    fn read_file(&mut self, path: String, parent: Option<NodeId>) -> Result<File, E>;
 
     fn get_file(&self, node_id: NodeId) -> Option<File>;
     fn get_parent(&self, parent: Option<NodeId>) -> &Dir;
@@ -131,11 +131,11 @@ impl<'r, T: VirtualFile> VirtualFileSystem<T, io::Error> for FileSystem<'r, T> {
         Ok(id)
     }
 
-    fn get_file_relative(&mut self, path: &str, NodeId(id): NodeId) -> io::Result<File> {
+    fn get_file_relative(&mut self, path: String, NodeId(id): NodeId) -> io::Result<File> {
         self.get_file_from_path(path, self.nodes[id].parent())
     }
 
-    fn get_file_from_path(&mut self, path: &str, parent: Option<NodeId>) -> io::Result<File> {
+    fn get_file_from_path(&mut self, path: String, parent: Option<NodeId>) -> io::Result<File> {
         let mut qualifiers = path.split('.');
         let mut dir = self.get_parent(parent);
 
@@ -160,7 +160,7 @@ impl<'r, T: VirtualFile> VirtualFileSystem<T, io::Error> for FileSystem<'r, T> {
         self.read_file(path, parent)
     }
 
-    fn read_file(&mut self, path: &str, parent: Option<NodeId>) -> io::Result<File> {
+    fn read_file(&mut self, path: String, parent: Option<NodeId>) -> io::Result<File> {
         let dir_path = match parent {
             Some(id) => self.get_node_full_name(id),
             None => self.root.clone(),
@@ -229,7 +229,7 @@ pub trait VirtualFile {
     fn file_name(&self) -> String;
     fn dir_name(&self) -> String;
     fn from_string(file: &str) -> Self;
-    fn join_with_file(path: &str, other_path: &str) -> Self;
+    fn join_with_file(path: &str, other_path: String) -> Self;
 }
 
 impl VirtualFile for PathBuf {
@@ -237,10 +237,9 @@ impl VirtualFile for PathBuf {
         self.with_extension("at")
             .as_path()
             .file_name()
-            .map(|name| name.to_ascii_lowercase())
+            .map(|name| name.to_string_lossy().to_string())
+            .map(lowercase_first_letter)
             .unwrap()
-            .to_string_lossy()
-            .to_string()
     }
 
     fn dir_name(&self) -> String {
@@ -251,9 +250,16 @@ impl VirtualFile for PathBuf {
         Self::from(file)
     }
 
-    fn join_with_file(path: &str, other_path: &str) -> Self {
+    fn join_with_file(path: &str, other_path: String) -> Self {
         Self::from(path)
-            .join(other_path.to_ascii_lowercase())
+            .join(lowercase_first_letter(other_path))
             .with_extension("at")
     }
+}
+
+fn lowercase_first_letter(s1: String) -> String {
+    let mut c = s1.chars();
+    c.next().map_or_else(String::new, |f| {
+        f.to_lowercase().collect::<String>() + c.as_str()
+    })
 }

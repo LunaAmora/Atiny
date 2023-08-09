@@ -1,0 +1,18 @@
+use ImportsMain
+
+type List t = | Cons t (List t) | Nil
+type Bool   = | True | False
+
+type OtherThing = {
+    other: ImportsMain::Something
+}
+
+fn lib_main : (OtherThing, ImportsMain::Something, (List Bool)) {
+    let arg = OtherThing {
+        other = ImportsMain::Something {
+            value = Cons False Nil
+        }
+    };
+
+    ImportsMain::main arg
+}
