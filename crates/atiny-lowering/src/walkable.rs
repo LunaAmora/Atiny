@@ -45,14 +45,7 @@ impl Walkable for Elaborated<Type> {
 
             Expr::CaseTree(expr, case_tree) => {
                 expr.walk(visitor);
-
                 visitor.visit_case_tree(case_tree);
-
-                for place in case_tree.places.iter_mut() {
-                    place.walk(visitor);
-                }
-
-                case_tree.tree.walk(visitor);
             }
 
             Expr::Abstraction(..) => {

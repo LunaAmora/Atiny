@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 
 use crate::walkable::Walkable;
 
-pub trait Visitor {
+pub trait Visitor: Sized {
     fn visit_symbol(&mut self, _: &mut Symbol) {}
     fn visit_number(&mut self, _: &mut u64) {}
     fn visit_type(&mut self, _: &mut Type) {}
@@ -20,7 +20,20 @@ pub trait Visitor {
     fn visit_application(&mut self, _: &mut Elaborated<Type>) {}
     fn visit_abstraction(&mut self, _: &mut Elaborated<Type>) {}
 
-    fn visit_case_tree(&mut self, _: &mut CaseTree<Type>) {}
+    fn visit_case_tree(&mut self, case_tree: &mut CaseTree<Type>) {
+        let CaseTree {
+            accessors: _,
+            places,
+            tree,
+        } = case_tree;
+
+        for place in places.iter_mut() {
+            place.walk(self);
+        }
+
+        tree.walk(self);
+    }
+
     fn visit_case_tree_node(&mut self, _: &mut CaseTreeNode) {}
 }
 
@@ -105,5 +118,26 @@ pub struct CollectLocalVars(IndexMap<Symbol, ByteRange>);
 impl Visitor for CollectLocalVars {
     fn visit_variable(&mut self, var: &mut VariableNode<Type>, loc: ByteRange) {
         self.0.insert(var.name.clone(), loc);
+    }
+
+    fn visit_case_tree(&mut self, case_tree: &mut CaseTree<Type>) {
+        let CaseTree {
+            accessors,
+            places,
+            tree,
+        } = case_tree;
+
+        for (accessor, place) in accessors.iter_mut().zip(places.iter_mut()) {
+            let mut visitor = Self::default();
+            place.walk(&mut visitor);
+
+            for symbol in accessor.keys().map(|s| Symbol(s.to_string())) {
+                visitor.0.remove(&symbol);
+            }
+
+            self.0.extend(visitor.0);
+        }
+
+        tree.walk(self);
     }
 }
