@@ -3,9 +3,8 @@
 //! problem into a set of sub problems and checking if the sub problems covers specific cases.
 
 use std::{
-    collections::HashSet,
+    collections::{HashSet, VecDeque},
     fmt::{Display, Formatter},
-    iter,
     rc::Rc,
 };
 
@@ -72,9 +71,15 @@ impl Witness {
     }
 }
 
+fn inline<T>(deque: &mut VecDeque<T>, inline: impl IntoIterator<Item = T>) {
+    deque.pop_front();
+    let rest = std::mem::replace(deque, inline.into_iter().collect());
+    deque.extend(rest);
+}
+
 /// A row is a clause of a pattern match. It contains a list of patterns that are being matched.
 #[derive(Clone)]
-pub struct Row(Option<usize>, Vec<Pattern>);
+pub struct Row(Option<usize>, VecDeque<Pattern>);
 
 impl Row {
     /// Checks if a row is empty.
@@ -84,61 +89,62 @@ impl Row {
 
     /// Adds a sequence of patterns to the beginning of a row and removes the first pattern of the
     /// row. It's used to "inline" a sequence of patterns into a row.
-    fn inline<I: IntoIterator<Item = Pattern>>(mut self, vec: I) -> Self {
-        self.1 = vec.into_iter().chain(self.1.into_iter().skip(1)).collect();
+    fn inline(mut self, vec: Vec<Pattern>) -> Self {
+        inline(&mut self.1, vec);
         self
     }
 
     /// Removes the first pattern of a row.
     fn pop_front(mut self) -> Self {
-        self.1 = self.1.into_iter().skip(1).collect();
+        self.1.pop_front();
         self
     }
 
     /// Prepends a pattern to a row.
     fn prepend(mut self, pat: Pattern) -> Self {
-        self.1 = iter::once(pat).chain(self.1).collect();
+        self.1.push_front(pat);
         self
     }
 
     /// Splits a row into two rows. The first row contains the first `place` patterns and the second
     /// row contains the rest of the patterns.
     fn split_vec(mut self, place: usize) -> (Vec<Pattern>, Self) {
+        self.1.make_contiguous();
         let mut vec = self.1.split_off(place);
         std::mem::swap(&mut vec, &mut self.1);
-        (vec, self)
+        (vec.into(), self)
     }
 
     /// Converts a row into a pattern. This is done by asserting that the row only contains one
     /// pattern and then returning that pattern.
     pub fn into_pattern(self) -> Pattern {
         assert_eq!(self.1.len(), 1);
-        self.1.into_iter().next().unwrap()
+        self.1.front().cloned().unwrap()
     }
 
-    pub fn specialize(self, ctx: &Ctx, case: Case<()>) -> Vec<Self> {
-        match (self.get_first_pattern(ctx), case) {
+    pub fn specialize(self, ctx: &Ctx, case: Case<()>) -> Option<Self> {
+        Some(match (self.get_first_pattern(ctx), case) {
             //default_row
-            (Case::Wildcard, Case::Wildcard) => vec![self.pop_front()],
+            (Case::Wildcard, Case::Wildcard) => self.pop_front(),
 
             //specialize_constructor
             (Case::Constructor(c1, args), Case::Constructor(c2, _)) if c1.name == c2.name => {
-                vec![self.inline(args)]
+                self.inline(args)
             }
             (Case::Wildcard, Case::Constructor(constr, _)) => {
-                vec![self.inline(vec![wildcard(); constr.args.len()])]
+                self.inline(vec![wildcard(); constr.args.len()])
             }
 
             //specialize_tuple
-            (Case::Tuple(p), Case::Tuple(t)) if p.len() == t.len() => vec![self.inline(p)],
-            (Case::Wildcard, Case::Tuple(t)) => vec![self.inline(vec![wildcard(); t.len()])],
+            (Case::Tuple(p), Case::Tuple(t)) if p.len() == t.len() => self.inline(p),
+            (Case::Wildcard, Case::Tuple(t)) => self.inline(vec![wildcard(); t.len()]),
 
             //specialize_number
-            (Case::Int(n1), Case::Int(n2)) if n1 == n2 => vec![self.pop_front()],
-            (Case::Wildcard, Case::Int(_)) => vec![self.pop_front()],
+            (Case::Int(n1), Case::Int(n2)) if n1 == n2 => self.pop_front(),
+            (Case::Wildcard, Case::Int(_)) => self.pop_front(),
 
-            _ => vec![],
-        }
+            _ => return None,
+        })
     }
 
     pub fn is_all_wildcards(&self, ctx: &Ctx) -> bool {
@@ -151,7 +157,7 @@ impl Row {
     }
 
     fn first(&self) -> &Pattern {
-        self.1.first().unwrap()
+        self.1.front().unwrap()
     }
 
     fn get_first_pattern(&self, ctx: &Ctx) -> Case<Pattern> {
@@ -180,7 +186,7 @@ impl Matrix {
             column
                 .into_iter()
                 .enumerate()
-                .map(|(place, pat)| Row(Some(place), vec![pat]))
+                .map(|(place, pat)| Row(Some(place), VecDeque::from([pat])))
                 .collect(),
         )
     }
@@ -189,7 +195,7 @@ impl Matrix {
     pub fn is_wildcard(&self, ctx: &Ctx) -> bool {
         self.0.iter().all(|row| {
             matches!(
-            &row.1[0].data,
+            &row.1.front().unwrap().data,
             PatternKind::Atom(AtomKind::Identifier(n)) if ctx.lookup_cons(n).is_none()
             )
         })
@@ -251,13 +257,12 @@ impl Matrix {
     /// Creates a new matrix where all the rows are specialized by a [`Case`]. This is done by
     /// checking if each row matches a [`Case`] in the first pattern and then flattening all
     /// the patterns into the row or removing it if it does not matches.
-    pub fn specialize(self, ctx: &Ctx, case: Case<()>) -> Self {
-        Self(
-            self.0
-                .into_iter()
-                .flat_map(|row| row.specialize(ctx, case.clone()))
-                .collect(),
-        )
+    pub fn specialize(&mut self, ctx: &Ctx, case: Case<()>) {
+        let rows = std::mem::take(&mut self.0);
+        self.0 = rows
+            .into_iter()
+            .flat_map(|row| row.specialize(ctx, case.clone()))
+            .collect();
     }
 }
 
@@ -266,9 +271,9 @@ impl Matrix {
 /// patterns that are being matched.
 #[derive(Clone)]
 pub struct Problem {
-    typ: Vec<Type>,
-    scrutinee: Vec<String>,
+    typ: VecDeque<Type>,
     case: Row,
+    scrutinee: VecDeque<String>,
     matrix: Matrix,
 }
 
@@ -277,8 +282,8 @@ impl Display for Row {
         if self.1.is_empty() {
             write!(f, "No Row")
         } else {
-            write!(f, "| {}", self.1[0])?;
-            for pat in self.1.iter().skip(1) {
+            write!(f, "|")?;
+            for pat in self.1.iter() {
                 write!(f, " {}", pat)?;
             }
             Ok(())
@@ -305,11 +310,11 @@ impl Display for Problem {
 impl Problem {
     /// Creates a new problem. It takes the scrutineer type of the problem, the case that is being
     /// checked and the patterns that are being matched.
-    pub fn new(typ: Type, useful: Vec<Pattern>, columns: Vec<Pattern>) -> Self {
+    pub fn new(typ: Type, useful: Pattern, columns: Vec<Pattern>) -> Self {
         Self {
-            typ: vec![typ],
-            case: Row(None, useful),
-            scrutinee: vec!["$gen".to_string()],
+            typ: VecDeque::from([typ]),
+            case: Row(None, VecDeque::from([useful])),
+            scrutinee: VecDeque::from(["$gen".to_string()]),
             matrix: Matrix::from_column(columns),
         }
     }
@@ -375,7 +380,7 @@ impl Problem {
                         return witness.expand(len, Some(name.clone()));
                     } else if let Witness::Ok(tree) = witness {
                         let switch = Switch {
-                            var: self.scrutinee[0].clone(),
+                            var: self.scrutinee.front().unwrap().clone(),
                             names,
                             cons: name.clone(),
                             tree,
@@ -397,18 +402,18 @@ impl Problem {
 
     /// Returns the first type of the problem.
     fn current_type(&self) -> Type {
-        self.typ.first().cloned().unwrap().flatten()
+        self.typ.front().cloned().unwrap().flatten()
     }
 
     /// Creates a new problem where the first type is removed and the case is updated to match the
     /// first type. It's used when we need to specialize the tree to an identifier
-    fn default_matrix(self, ctx: &Ctx) -> Self {
-        Self {
-            typ: self.typ[1..].to_vec(),
-            case: self.case.pop_front(),
-            matrix: self.matrix.specialize(ctx, Case::Wildcard),
-            scrutinee: self.scrutinee[1..].to_vec(),
-        }
+    fn default_matrix(mut self, ctx: &Ctx) -> Self {
+        self.typ.pop_front();
+        self.case.1.pop_front();
+        self.scrutinee.pop_front();
+        self.matrix.specialize(ctx, Case::Wildcard);
+
+        self
     }
 
     /// Generates a constructor pattern for the given constructor name.
@@ -469,32 +474,20 @@ impl Problem {
         witness.add_pattern(wildcard())
     }
 
-    fn specialize<T, P>(
-        self,
+    fn specialize(
+        mut self,
         ctx: &Ctx,
-        types: T,
-        pat: P,
+        types: impl IntoIterator<Item = Type>,
+        pat: impl IntoIterator<Item = Pattern>,
         case: Case<()>,
         scrutinee: Vec<String>,
-    ) -> Witness
-    where
-        T: IntoIterator<Item = Type>,
-        P: IntoIterator<Item = Pattern>,
-    {
-        let specialized = Self {
-            typ: types
-                .into_iter()
-                .chain(self.typ.iter().skip(1).cloned())
-                .collect(),
-            case: self.case.inline(pat),
-            matrix: self.matrix.specialize(ctx, case),
-            scrutinee: scrutinee
-                .into_iter()
-                .chain(self.scrutinee.into_iter().skip(1))
-                .collect(),
-        };
+    ) -> Witness {
+        inline(&mut self.typ, types);
+        inline(&mut self.case.1, pat);
+        inline(&mut self.scrutinee, scrutinee);
+        self.matrix.specialize(ctx, case);
 
-        specialized.exhaustiveness(ctx)
+        self.exhaustiveness(ctx)
     }
 
     /// Checks if the problem is exhaustive on a case. This is the "entrypoint" forall of the
@@ -600,7 +593,7 @@ impl Problem {
             (Case::Wildcard, MonoType::Tuple(types)) => {
                 let len = types.len();
 
-                let var = self.scrutinee[0].clone();
+                let var = self.scrutinee.front().unwrap().clone();
 
                 let scrutinee = (0..len).map(|_| ctx.generate_name("$gen")).collect_vec();
 

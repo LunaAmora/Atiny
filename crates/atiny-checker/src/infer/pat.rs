@@ -131,7 +131,7 @@ impl Ctx {
         unify(self.clone(), cons_pat.clone(), pattern_type.clone());
         self.extend_with_pattern(pattern, pattern_type);
 
-        let problem = Problem::new(cons_pat, vec![wildcard()], vec![pattern.clone()]);
+        let problem = Problem::new(cons_pat, wildcard(), vec![pattern.clone()]);
         problem.exhaustiveness(self)
     }
 
