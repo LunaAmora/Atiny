@@ -107,7 +107,7 @@ impl Infer for &Expr {
                 let abs = match elab_body.data {
                     Elab::Abstraction(ref mut args, _, ref mut typ) => {
                         *typ = t_ret.clone();
-                        args.push_back(symbol);
+                        args.push_front(symbol);
                         elab_body.location = self.location;
                         elab_body
                     }

@@ -52,7 +52,7 @@ impl Walkable for Elaborated<Type> {
                 visitor.visit_abstraction(self);
 
                 if let Expr::Abstraction(args, expr, typ) = &mut self.data {
-                    for (sym, typ) in args.iter_mut().rev() {
+                    for (sym, typ) in args.iter_mut() {
                         visitor.visit_symbol(sym);
                         visitor.visit_type(typ);
                     }
