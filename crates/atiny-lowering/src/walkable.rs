@@ -123,10 +123,18 @@ impl Walkable for CaseTreeNode {
     fn walk<V: Visitor>(&mut self, visitor: &mut V) {
         visitor.visit_case_tree_node(self);
 
-        if let Self::Node(v) = self {
-            for s in v.iter_mut() {
-                s.tree.walk(visitor);
+        match self {
+            Self::Node(vec) => {
+                for switch in vec.iter_mut() {
+                    switch.tree.walk(visitor);
+                }
             }
+
+            Self::Tuple(tuple) => {
+                tuple.tree.walk(visitor);
+            }
+
+            Self::Leaf(_) => {}
         }
     }
 }
