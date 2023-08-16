@@ -152,7 +152,7 @@ impl Infer for &Expr {
 
                         for c in &clauses[1..] {
                             let column_pat = c.pat.clone();
-                            let column = vec![column_pat.clone()];
+                            let column = column_pat.clone();
                             let problem = Problem::new(pat_ty.clone(), column, columns.clone());
 
                             ctx.set_position(column_pat.location);
@@ -170,7 +170,7 @@ impl Infer for &Expr {
                         Vec::new()
                     };
 
-                    let problem = Problem::new(pat_ty, vec![wildcard()], columns);
+                    let problem = Problem::new(pat_ty, wildcard(), columns);
                     let witness = problem.exhaustiveness(&ctx);
 
                     witness.result().map_or_else(
