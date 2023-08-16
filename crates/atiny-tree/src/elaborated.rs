@@ -125,6 +125,12 @@ pub enum CaseTreeNode {
     Leaf(usize),
 }
 
+impl Default for CaseTreeNode {
+    fn default() -> Self {
+        Self::Leaf(0)
+    }
+}
+
 impl CaseTreeNode {
     pub fn render_indented(&self, f: &mut Formatter<'_>, indent: usize) -> std::fmt::Result {
         match self {

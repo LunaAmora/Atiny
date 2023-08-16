@@ -31,24 +31,6 @@ pub enum Witness {
 }
 
 impl Witness {
-    /// Creates a new witness that contains a new pattern based on the thing that got non exhausted.
-    pub fn expand(self, size: usize, constructor_name: Option<String>) -> Self {
-        if let Self::NonExhaustive(row) = self {
-            let (vec, row) = row.split_vec(size);
-            let data = match constructor_name {
-                Some(name) => PatternKind::Constructor(name, vec),
-                _ => PatternKind::Atom(AtomKind::Tuple(vec)),
-            };
-            let row = row.prepend(Pattern {
-                location: ByteRange::default(),
-                data,
-            });
-            Self::NonExhaustive(row)
-        } else {
-            self
-        }
-    }
-
     /// Checks if a witness is non exhaustive.
     pub fn is_non_exhaustive(&self) -> bool {
         matches!(self, Self::NonExhaustive(_))
@@ -82,6 +64,21 @@ fn inline<T>(deque: &mut VecDeque<T>, inline: impl IntoIterator<Item = T>) {
 pub struct Row(Option<usize>, VecDeque<Pattern>);
 
 impl Row {
+    /// Expand a row with a new pattern based on the thing that got non exhausted.
+    pub fn expand(&mut self, size: usize, constructor_name: Option<String>) {
+        let vec = self.split_vec(size);
+
+        let data = match constructor_name {
+            Some(name) => PatternKind::Constructor(name, vec),
+            _ => PatternKind::Atom(AtomKind::Tuple(vec)),
+        };
+
+        self.1.push_front(Pattern {
+            location: ByteRange::default(),
+            data,
+        });
+    }
+
     /// Checks if a row is empty.
     fn is_empty(&self) -> bool {
         self.1.is_empty()
@@ -106,13 +103,13 @@ impl Row {
         self
     }
 
-    /// Splits a row into two rows. The first row contains the first `place` patterns and the second
+    /// Splits a row into two rows. The returned row contains the first `place` patterns and the self
     /// row contains the rest of the patterns.
-    fn split_vec(mut self, place: usize) -> (Vec<Pattern>, Self) {
+    fn split_vec(&mut self, place: usize) -> Vec<Pattern> {
         self.1.make_contiguous();
         let mut vec = self.1.split_off(place);
         std::mem::swap(&mut vec, &mut self.1);
-        (vec.into(), self)
+        vec.into()
     }
 
     /// Converts a row into a pattern. This is done by asserting that the row only contains one
@@ -361,12 +358,10 @@ impl Problem {
 
                 for constructor in sum {
                     let len = constructor.args.len();
+                    let cons = constructor.name.clone();
+                    let names = generate_names(ctx, len);
 
-                    let names = (0..len)
-                        .map(|_| ctx.generate_name("$gen"))
-                        .collect::<Vec<_>>();
-
-                    let witness = self.clone().specialize_cons(
+                    let mut witness = self.clone().specialize_cons(
                         ctx,
                         type_args,
                         constructor.clone(),
@@ -374,19 +369,21 @@ impl Problem {
                         names.clone(),
                     );
 
-                    let name = &constructor.name;
+                    match witness {
+                        Witness::NonExhaustive(ref mut row) => {
+                            row.expand(len, Some(cons));
+                            return witness;
+                        }
 
-                    if witness.is_non_exhaustive() {
-                        return witness.expand(len, Some(name.clone()));
-                    } else if let Witness::Ok(tree) = witness {
-                        let switch = Switch {
-                            var: self.scrutinee.front().unwrap().clone(),
-                            names,
-                            cons: name.clone(),
-                            tree,
-                        };
-
-                        nodes.push(switch);
+                        Witness::Ok(tree) => {
+                            let switch = Switch {
+                                var: self.scrutinee.front().unwrap().clone(),
+                                names,
+                                cons,
+                                tree,
+                            };
+                            nodes.push(switch);
+                        }
                     }
                 }
 
@@ -592,48 +589,38 @@ impl Problem {
 
             (Case::Wildcard, MonoType::Tuple(types)) => {
                 let len = types.len();
-
+                let names = generate_names(ctx, len);
                 let var = self.scrutinee.front().unwrap().clone();
 
-                let scrutinee = (0..len).map(|_| ctx.generate_name("$gen")).collect_vec();
-
-                let witness = self.specialize(
+                let mut witness = self.specialize(
                     ctx,
                     types.clone(),
                     vec![wildcard(); len],
                     Case::Tuple(vec![(); len]),
-                    scrutinee.clone(),
+                    names.clone(),
                 );
 
-                let witness = if witness.is_non_exhaustive() {
-                    witness.expand(len, None)
-                } else {
-                    witness
-                };
-
                 match witness {
-                    Witness::Ok(tree) => Witness::Ok(CaseTreeNode::Tuple(Box::new(Tuple {
-                        var,
-                        names: scrutinee,
-                        tree,
-                    }))),
-                    Witness::NonExhaustive(_) => witness,
+                    Witness::NonExhaustive(ref mut row) => {
+                        row.expand(len, None);
+                        witness
+                    }
+
+                    Witness::Ok(tree) => {
+                        Witness::Ok(CaseTreeNode::Tuple(Box::new(Tuple { var, names, tree })))
+                    }
                 }
             }
 
             (Case::Wildcard, _) => self.specialize_wildcard(ctx),
 
             (Case::Constructor(cons, pat), MonoType::Application(_, args)) => {
-                let names = (0..pat.len())
-                    .map(|_| ctx.generate_name("$GEN"))
-                    .collect_vec();
+                let names = generate_names(ctx, pat.len());
                 self.specialize_cons(ctx, args, cons, pat, names)
             }
 
             (Case::Tuple(pat), MonoType::Tuple(types)) => {
-                let names = (0..pat.len())
-                    .map(|_| ctx.generate_name("$GEN"))
-                    .collect_vec();
+                let names = generate_names(ctx, pat.len());
 
                 self.specialize(
                     ctx,
@@ -649,6 +636,10 @@ impl Problem {
             _ => unimplemented!(),
         }
     }
+}
+
+fn generate_names(ctx: &Ctx, len: usize) -> Vec<String> {
+    (0..len).map(|_| ctx.generate_name("$gen")).collect()
 }
 
 #[derive(Debug, Clone)]
