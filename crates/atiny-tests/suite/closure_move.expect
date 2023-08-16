@@ -1,0 +1,16 @@
+
+[error]: free variables can not move into closures yet: 's'
+
+    ┌─> closure_move.at:4:19
+    │
+  4 │     |a| { a + z + s } 1
+    │                   ^
+    │
+
+[error]: free variables can not move into closures yet: 'z'
+
+    ┌─> closure_move.at:4:15
+    │
+  4 │     |a| { a + z + s } 1
+    │               ^
+    │

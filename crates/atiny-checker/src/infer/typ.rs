@@ -3,7 +3,7 @@
 use super::Infer;
 use crate::{context::*, types::*};
 
-use atiny_location::WithLoc;
+use atiny_location::{Located, WithLoc};
 use atiny_tree::r#abstract::{Path, TypeApplicationNode, TypeKind, TypeNode, VariableNode};
 
 impl Infer for &TypeNode {
@@ -73,13 +73,11 @@ impl Infer for &TypeNode {
                 }
             }
 
-            TypeKind::Path(path @ Path(_, item)) => ctx
+            TypeKind::Path(path @ Path(_, Located { location, data })) => ctx
                 .ctx_from_path(path, |ctx| {
-                    TypeKind::Variable(VariableNode {
-                        name: item.data.clone(),
-                    })
-                    .with_loc(item)
-                    .infer(ctx.clone())
+                    TypeKind::Variable(VariableNode { name: data.clone() })
+                        .with_loc(*location)
+                        .infer(ctx.clone())
                 })
                 .unwrap_or_else(|| ctx.infer_error()),
         }

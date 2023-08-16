@@ -1,20 +1,23 @@
-use atiny_tree::elaborated::{CaseTreeNode, Expr, Stmt};
+use atiny_checker::{infer::top_level::FnBody, program::Program, types::Type};
+use atiny_tree::elaborated::{CaseTreeNode, Elaborated, Expr, Stmt};
 
 use crate::visitors::Visitor;
 
-pub trait Walkable<T> {
-    fn walk<V: Visitor<T>>(&mut self, visitor: &mut V);
+pub trait Walkable {
+    fn walk<V: Visitor>(&mut self, visitor: &mut V);
 }
 
-impl<T> Walkable<T> for Expr<T> {
-    fn walk<V: Visitor<T>>(&mut self, visitor: &mut V) {
-        match self {
-            Self::Number(num) => visitor.visit_number(num),
+impl Walkable for Elaborated<Type> {
+    fn walk<V: Visitor>(&mut self, visitor: &mut V) {
+        let loc = self.location;
 
-            Self::Tuple(tuple) => tuple.iter_mut().for_each(|expr| expr.walk(visitor)),
+        match &mut self.data {
+            Expr::Number(num) => visitor.visit_number(num),
 
-            Self::Variable(var) => {
-                visitor.visit_variable(var);
+            Expr::Tuple(tuple) => tuple.iter_mut().for_each(|expr| expr.walk(visitor)),
+
+            Expr::Variable(var) => {
+                visitor.visit_variable(var, loc);
                 visitor.visit_symbol(&mut var.name);
 
                 for typ in var.inst_types.iter_mut() {
@@ -22,8 +25,8 @@ impl<T> Walkable<T> for Expr<T> {
                 }
             }
 
-            Self::Function(var) => {
-                visitor.visit_function(var);
+            Expr::Function(var) => {
+                visitor.visit_function(var, loc);
                 visitor.visit_symbol(&mut var.name);
 
                 for typ in var.inst_types.iter_mut() {
@@ -31,8 +34,8 @@ impl<T> Walkable<T> for Expr<T> {
                 }
             }
 
-            Self::Constructor(var) => {
-                visitor.visit_constructor(var);
+            Expr::Constructor(var) => {
+                visitor.visit_constructor(var, loc);
                 visitor.visit_symbol(&mut var.name);
 
                 for typ in var.inst_types.iter_mut() {
@@ -40,23 +43,16 @@ impl<T> Walkable<T> for Expr<T> {
                 }
             }
 
-            Self::CaseTree(expr, case_tree) => {
+            Expr::CaseTree(expr, case_tree) => {
                 expr.walk(visitor);
-
                 visitor.visit_case_tree(case_tree);
-
-                for place in case_tree.places.iter_mut() {
-                    place.walk(visitor);
-                }
-
-                case_tree.tree.walk(visitor);
             }
 
-            Self::Abstraction(..) => {
+            Expr::Abstraction(..) => {
                 visitor.visit_abstraction(self);
 
-                if let Self::Abstraction(args, expr, typ) = self {
-                    for (sym, typ) in args.iter_mut().rev() {
+                if let Expr::Abstraction(args, expr, typ) = &mut self.data {
+                    for (sym, typ) in args.iter_mut() {
                         visitor.visit_symbol(sym);
                         visitor.visit_type(typ);
                     }
@@ -68,10 +64,10 @@ impl<T> Walkable<T> for Expr<T> {
                 }
             }
 
-            Self::Application(..) => {
+            Expr::Application(..) => {
                 visitor.visit_application(self);
 
-                if let Self::Application(fun, args, typ) = self {
+                if let Expr::Application(fun, args, typ) = &mut self.data {
                     fun.walk(visitor);
 
                     for arg in args.iter_mut() {
@@ -84,7 +80,7 @@ impl<T> Walkable<T> for Expr<T> {
                 }
             }
 
-            Self::RecordCreation(sym, fields) => {
+            Expr::RecordCreation(sym, fields) => {
                 visitor.visit_symbol(sym);
                 for (field, expr) in fields.iter_mut() {
                     visitor.visit_symbol(field);
@@ -92,7 +88,7 @@ impl<T> Walkable<T> for Expr<T> {
                 }
             }
 
-            Self::RecordUpdate(expr, fields) => {
+            Expr::RecordUpdate(expr, fields) => {
                 expr.walk(visitor);
                 for (field, expr) in fields.iter_mut() {
                     visitor.visit_symbol(field);
@@ -100,13 +96,13 @@ impl<T> Walkable<T> for Expr<T> {
                 }
             }
 
-            Self::RecordField(record, field, expr) => {
+            Expr::RecordField(record, field, expr) => {
                 visitor.visit_symbol(record);
                 visitor.visit_symbol(field);
                 expr.walk(visitor);
             }
 
-            Self::Block(block) => {
+            Expr::Block(block) => {
                 for stmt in block.iter_mut() {
                     match stmt {
                         Stmt::Let(tree, expr) => {
@@ -118,19 +114,48 @@ impl<T> Walkable<T> for Expr<T> {
                 }
             }
 
-            Self::Error => todo!(),
+            Expr::Error => {}
         }
     }
 }
 
-impl<T> Walkable<T> for CaseTreeNode {
-    fn walk<V: Visitor<T>>(&mut self, visitor: &mut V) {
+impl Walkable for CaseTreeNode {
+    fn walk<V: Visitor>(&mut self, visitor: &mut V) {
         visitor.visit_case_tree_node(self);
 
-        if let Self::Node(v) = self {
-            for s in v.iter_mut() {
-                s.tree.walk(visitor);
+        match self {
+            Self::Node(vec) => {
+                for switch in vec.iter_mut() {
+                    switch.tree.walk(visitor);
+                }
+            }
+
+            Self::Tuple(tuple) => {
+                tuple.tree.walk(visitor);
+            }
+
+            Self::Leaf(_) => {}
+        }
+    }
+}
+
+impl Walkable for Program {
+    fn walk<V: Visitor>(&mut self, visitor: &mut V) {
+        let mut elab = { std::mem::take(&mut self.borrow_mut().elaborated) };
+
+        for (_, bodies) in elab.iter_mut() {
+            for body in bodies {
+                body.walk(visitor);
             }
         }
+
+        self.borrow_mut().elaborated = elab;
+    }
+}
+
+impl Walkable for FnBody {
+    fn walk<V: Visitor>(&mut self, visitor: &mut V) {
+        let Self(_, body) = self;
+        body.walk(visitor);
     }
 }

@@ -3,6 +3,8 @@
 
 use atiny_checker::infer::Infer;
 use atiny_checker::program::Program;
+use atiny_lowering::visitors::{ClosureMoveChecker, PartialAppRemover};
+use atiny_lowering::walkable::Walkable;
 use atiny_tree::r#abstract::Expr;
 use itertools::Itertools;
 
@@ -44,11 +46,14 @@ mk_test!("/suite/parsing/", |file_name| {
 });
 
 mk_test!("/suite/", |file_name| {
-    let program = Program::new(file_name).expect("IO error");
+    let mut program = Program::new(file_name).expect("IO error");
 
     let _ = program
         .get_entry(|ctx, parsed: Option<Vec<_>>| parsed.infer(ctx))
         .infer(program.clone());
+
+    program.walk(&mut PartialAppRemover);
+    program.walk(&mut ClosureMoveChecker::new(program.clone()));
 
     program
         .take_errors()

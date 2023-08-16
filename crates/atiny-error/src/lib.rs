@@ -3,6 +3,39 @@ use std::fmt::Display;
 
 use atiny_location::{ByteRange, NodeId, Point, Range};
 
+pub trait ErrorBuilder {
+    fn push_error(&self, error: Error);
+    fn location(&self) -> ByteRange;
+
+    fn error(&self, msg: String) {
+        self.push_error(Error::new(Message::Single(msg), self.location()));
+    }
+
+    fn errors(&self, msg: Vec<String>) {
+        self.push_error(Error::new(Message::Multi(msg), self.location()));
+    }
+
+    fn suggestion(&self, msg: String, sugestion_kind: SugestionKind) {
+        self.push_error(Error::new_sugestion(
+            Message::Single(msg),
+            sugestion_kind,
+            self.location(),
+        ));
+    }
+
+    fn suggestions(&self, msg: Vec<String>, sugestion_kind: SugestionKind) {
+        self.push_error(Error::new_sugestion(
+            Message::Multi(msg),
+            sugestion_kind,
+            self.location(),
+        ));
+    }
+
+    fn dyn_error(&self, msg: impl Display + 'static) {
+        self.push_error(Error::new_dyn(msg, self.location()));
+    }
+}
+
 pub enum ErrorKind {
     Static(Message),
     Sugestion(Message, SugestionKind),

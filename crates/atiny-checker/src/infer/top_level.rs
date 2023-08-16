@@ -1,5 +1,6 @@
 use crate::context::Ctx;
 use crate::{check::Check, infer::Infer, types::*};
+use atiny_error::ErrorBuilder;
 use atiny_misc::SeqIter;
 use atiny_parser::atiny_fs::File;
 use atiny_tree::r#abstract::*;
